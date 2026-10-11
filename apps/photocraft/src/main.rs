@@ -50,6 +50,7 @@ mod linux_libs;
 mod logging;
 mod monitor_profile;
 mod photoshop_settings;
+mod plugin_presets;
 mod presentation;
 mod screen_color;
 mod services;
