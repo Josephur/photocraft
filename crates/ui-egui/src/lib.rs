@@ -117,6 +117,7 @@ pub mod parity;
 pub mod patch_preview;
 pub mod perspective_ui;
 pub mod pixel_grid;
+pub mod plugin_points;
 pub mod plugin_ui;
 pub mod point_curve;
 pub mod prefs_ui;

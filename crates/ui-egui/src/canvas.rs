@@ -2590,6 +2590,9 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
                     crate::color_picker_ui::sample_at(app, d[0], d[1]);
                 }
             }
+        } else if primary && !middle && crate::plugin_points::active(app, idx) {
+            // A plug-in's `point` params: handles clicked or dragged on the image.
+            crate::plugin_points::interact(app, &ctx, &xf, size, rect, idx);
         } else if primary
             && !middle
             && let Some(p) = crate::dialogs::free_pointer_over(&ctx, rect).filter(|p| img_rect.contains(*p))
@@ -2600,6 +2603,9 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
                 .map(|q| xf.to_doc(q));
             crate::color_range_ui::canvas_eyedropper(app, &ctx, p, press);
         }
+    }
+    if primary {
+        crate::plugin_points::draw(app, &painter, &xf, size, idx);
     }
     // The selected Hand yields to an open Free Transform box in this (primary) window: the box
     // owns the pointer, so the tool behind it cannot steal the resize drag (#2302). The held Hand
