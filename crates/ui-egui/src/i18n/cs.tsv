@@ -3808,3 +3808,4 @@ navigator	Zoom	Zvětšení
 # Free Transform: a new layer while the box is open (#5859)
 	Free Transform is still being applied; try again when it has finished.	Volná transformace se stále použije; zkuste to znovu, až skončí.
 	The transform couldn't be applied.	Transformaci nelze použít.
+	Drag to set the direction	Přetažením nastavte směr

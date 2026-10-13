@@ -3960,3 +3960,4 @@ curves	Smooth	Vloeiend maken
 # Free Transform: a new layer while the box is open (#5859)
 	Free Transform is still being applied; try again when it has finished.	Vrije transformatie wordt nog toegepast; probeer het opnieuw als die klaar is.
 	The transform couldn't be applied.	De transformatie kon niet worden toegepast.
+	Drag to set the direction	Sleep om de richting in te stellen

@@ -4162,3 +4162,4 @@ navigator	Zoom	Zoom
 # Free Transform: a new layer while the box is open (#5859)
 	Free Transform is still being applied; try again when it has finished.	Transformación libre aún se está aplicando; inténtelo de nuevo cuando termine.
 	The transform couldn't be applied.	No se pudo aplicar la transformación.
+	Drag to set the direction	Arrastra para ajustar la dirección
