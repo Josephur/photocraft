@@ -77,7 +77,7 @@ build. Limits (`photocraft_plugins::Limits`, defaults):
 |---|---|---|
 | Host imports | none: no WASI, file system, network, clock or randomness | module rejected at install |
 | Module size | 32 MiB | rejected |
-| Linear memory | 512 MiB per instance | `memory.grow` returns -1; oversized initial memory fails |
+| Linear memory | 1 GiB per native instance; 512 MiB on the web | `memory.grow` returns -1; oversized initial memory fails |
 | Instructions (fuel) | 50 M per call + 8,000 per sample for `pc_filter`, with at least four samples of work allowed per pixel | `Limit("instruction budget")` |
 | Wall clock | 60 s per run (native; checked every 20 M instructions) | `Limit("time budget")` |
 | Call depth | 1,024 frames | trap |
@@ -108,6 +108,23 @@ exports. All integers are `i32` unless noted; pointers are offsets into the modu
 | `pc_manifest` | `() -> i64` | `(len << 32) \| ptr` of the UTF-8 manifest JSON (≤ 64 KiB). |
 | `pc_alloc` | `(size) -> ptr` | A block of `size` bytes the host may write, or `0` on failure. Never freed: each band gets a fresh instance. |
 | `pc_filter` | `(buf, buf_len, width, height, channels, format, params, params_len) -> i32` | Filters the pixels in place; `0` = success, anything else is an error code. |
+| `pc_overlap` (optional) | `(params, params_len) -> i32` | Required context in pixels for this run's resolved parameters. Replaces manifest `overlap` when present. |
+
+The optional `pc_overlap` export extends ABI v1 without changing its version. Before allocating
+pixel buffers, the host calls it once in a fresh instance with UTF-8 JSON containing the validated
+parameters, including defaults. This JSON has no `_image` field: no band exists yet. The function
+must return a deterministic non-negative radius that includes every source read and auxiliary
+stencil used by those parameters. The host uses the same result for input padding, content/shape
+output expansion, and `_image.overlap` in every filter band. No state from negotiation survives
+into the fresh filter instances.
+
+Native builds accept 0–1,536 pixels, supporting effects reaching 1,500 pixels with room for
+sampling stencils. Web builds retain a maximum of 256 pixels. A negative or excessive result is
+an explicit overlap-budget error; the host never clips a requested radius. An export with the
+wrong signature is rejected at installation. Negotiation runs under the ordinary base fuel,
+linear-memory and run-deadline limits. Plug-ins without the export keep their existing static
+manifest behavior. Older hosts ignore this optional export, so plug-ins requiring it must check
+the `_image.overlap` they receive and fail if it is insufficient.
 
 ### Manifest
 
@@ -181,11 +198,23 @@ Swirl's Distort style. The strength control repeats the style selector's `effect
 
 Manifests that omit these optional fields keep the existing dialog and preset behavior.
 
-- `overlap` (0–256): pixels of context the filter needs around each output pixel (a blur radius).
+- `overlap` (0–1,536 on native builds; 0–256 on the web): static pixels of context the filter needs
+  around each output pixel (a blur radius), or the fallback for hosts without `pc_overlap`.
   The host pads each band by `overlap` on every side, repeating the edge pixels of the canvas (or of
-  off-canvas layer content), and keeps only the inner rectangle of the result.
+  off-canvas layer content), and keeps only the inner rectangle of the result. When `pc_overlap`
+  is present, its per-run result replaces this value throughout the run.
 - `area`: `"content"` (default) filters the layer's non-transparent bounds grown by `overlap`;
   `"canvas"` filters the whole canvas, including transparent pixels (for generators).
+- `clampContext`: optional boolean, default `false`. A plug-in that understands the output
+  rectangle described below may opt into clipping source context to the image extent plus a
+  36-pixel boundary guard for native overlaps above 256 pixels. This avoids processing large
+  repeated margins beyond the image. The guard preserves edge stencils: source colour repeats
+  at the extent, while selection coverage remains zero outside it. Existing plug-ins and
+  ordinary overlaps of 256 pixels or less retain symmetric, untrimmed margins.
+- `clampContextWhen`: optional choice scope, using the same `{ "parameter": "effect", "values":
+  ["fire", "drip"] }` structure and validation as `selectionShape`. When present, clipping is
+  enabled only for a matching resolved choice and still requires `clampContext: true`. This lets
+  suites retain full source margins for effects whose derived fields need distant edge context.
 
 #### Selections as shape geometry
 
@@ -206,7 +235,7 @@ channel layout, with the same temporary-alpha rule.
 The filter sees a cut-out of the selected photo, including feathering and existing layer alpha.
 Its output is composited back into the photo, replacing the selected cut-out while preserving the
 unselected remainder. This avoids doubling source alpha or applying feather coverage twice.
-Effects may extend outside the selection by at most the declared `overlap`, within the filter's
+Effects may extend outside the selection by at most the resolved `overlap`, within the filter's
 ordinary content/canvas output bounds; pixels beyond that region are unchanged. The selection
 mask has zero coverage outside its bounds, including in the band's neighbourhood pixels.
 
@@ -293,10 +322,26 @@ conversion:
 
 Alpha channels and Quick Mask targets arrive as one grayscale channel.
 
-The host converts the layer into bands (tile-aligned blocks of at most ~4 MiB of `f32`), runs them in
+The host converts the layer into bands (tile-aligned output blocks of at most ~4 MiB of `f32`), runs them in
 parallel on native builds, writes the results back in the layer's format, then blends with the
 selection: `out = original + (filtered − original) × coverage`, exactly as built-in filters do. A
-plug-in never sees the selection and needs nothing special to support it.
+normal filter needs nothing special to support selection clipping; an opted-in shape effect
+receives the masked silhouette described above.
+
+Context margins are additional to the ordinary output-band target. Band width shrinks when
+necessary to fit the memory budget; an impossible minimum band fails before pixel allocation.
+For overlaps above 256 pixels, runs use larger tile-aligned rectangles in both dimensions,
+sized against the actual input, clipped when the plug-in opts in for that choice. This amortizes large neighborhoods
+across useful output pixels; it does not change the requested radius or effect geometry.
+
+Large-context runs reserve 16 MiB for module/allocator overhead, then limit input to one third
+of the remaining linear-memory cap, leaving room for source copies and intermediate fields.
+They use one worker and bound the estimated active memory to 2 GiB, counting the full instance
+cap and up to three host pixel buffers. Ordinary overlaps keep the existing band target and
+parallelism. Caller-supplied lower memory limits remain lower. These are planning budgets, not
+extra memory granted to the plug-in: the per-instance cap and 60-second native deadline still
+apply. Large effects must keep their own scratch allocations and work bounded; they can fail
+explicitly if those resource limits are exhausted.
 
 ### Parameters
 
@@ -312,6 +357,16 @@ the band's geometry:
 
 `x, y` is the document position of the buffer's top-left sample (including the margins), so
 position-dependent filters (gradients, vignettes) are seamless across bands.
+
+For a clipped `clampContext` run, `_image` also includes `outputX`, `outputY`, `outputWidth` and
+`outputHeight`. These are the output rectangle relative to the supplied buffer, in pixels.
+The plug-in must use this rectangle instead of assuming `overlap` pixels on every side; only
+this rectangle is retained by the host. `_image.overlap` still reports the requested dependency
+radius even when context at an image edge was trimmed. For example, a whole 64 × 64 image with
+300 pixels of requested context receives a 136 × 136 buffer at `x: -36, y: -36`, and its output is
+`outputX: 36, outputY: 36, outputWidth: 64, outputHeight: 64`. When these fields are absent, the
+original symmetric-margin contract applies. Sampling beyond a clipped input must clamp at its
+edge; plug-ins needing explicit extended margins should leave `clampContext` disabled.
 
 ## Writing a plug-in in Rust
 
