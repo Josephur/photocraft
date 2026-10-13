@@ -41,7 +41,7 @@ impl Default for Limits {
     fn default() -> Self {
         Self {
             max_module_bytes: 32 << 20,
-            max_memory_bytes: 512 << 20,
+            max_memory_bytes: if cfg!(target_arch = "wasm32") { 512 << 20 } else { 1024 << 20 },
             band_bytes: 4 << 20,
             fuel_base: 50_000_000,
             fuel_per_sample: 8_000,
@@ -60,6 +60,7 @@ pub struct Plugin {
     limits: Limits,
     size: usize,
     source: Option<String>,
+    dynamic_overlap: bool,
 }
 
 impl std::fmt::Debug for Plugin {
@@ -136,7 +137,7 @@ impl Plugin {
                 imp.name()
             )));
         }
-        let mut p = Plugin { manifest: placeholder_manifest(), engine, module, limits, size: bytes.len(), source: None };
+        let mut p = Plugin { manifest: placeholder_manifest(), engine, module, limits, size: bytes.len(), source: None, dynamic_overlap: false };
         let deadline = Deadline::new(&p.limits);
         let mut live = p.instantiate(&deadline)?;
         let version: TypedFunc<(), i32> = live.func("pc_abi_version")?;
@@ -155,6 +156,10 @@ impl Plugin {
         // The other exports must exist with the right types.
         live.func::<i32, i32>("pc_alloc")?;
         live.func::<FilterArgs, i32>("pc_filter")?;
+        if live.instance.get_export(&live.store, "pc_overlap").is_some() {
+            live.func::<(i32, i32), i32>("pc_overlap")?;
+            p.dynamic_overlap = true;
+        }
         Ok(p)
     }
 
@@ -178,6 +183,35 @@ impl Plugin {
     pub fn with_source(mut self, source: impl Into<String>) -> Self {
         self.source = Some(source.into());
         self
+    }
+
+    /// Ask once per run, before planning output or allocating pixel bands. Optional ABI-v1
+    /// exports replace the static fallback; a small effect need not pay its suite's maximum.
+    pub(crate) fn overlap_for_params(&self, params: &serde_json::Value, deadline: &Deadline) -> Result<u32> {
+        if !self.dynamic_overlap {
+            return Ok(self.manifest.overlap);
+        }
+        let params = serde_json::to_vec(params).map_err(|e| Error::Params(e.to_string()))?;
+        let len = i32::try_from(params.len())
+            .ok()
+            .filter(|_| params.len() <= self.limits.max_memory_bytes)
+            .ok_or_else(|| Error::Limit("memory budget (overlap parameters too large)".into()))?;
+        let mut live = self.instantiate(deadline)?;
+        let alloc: TypedFunc<i32, i32> = live.func("pc_alloc")?;
+        let overlap: TypedFunc<(i32, i32), i32> = live.func("pc_overlap")?;
+        let ptr = self.call(&mut live, &alloc, len.max(1), self.limits.fuel_base, deadline)?;
+        if ptr == 0 {
+            return Err(Error::Failed("pc_alloc returned 0 (out of memory)".into()));
+        }
+        let start = ptr as u32 as usize;
+        let end = start.checked_add(params.len()).ok_or_else(|| Error::Abi("pc_alloc returned a block outside memory".into()))?;
+        live.memory
+            .data_mut(&mut live.store)
+            .get_mut(start..end)
+            .ok_or_else(|| Error::Abi("pc_alloc returned a block outside memory".into()))?
+            .copy_from_slice(&params);
+        let requested = self.call(&mut live, &overlap, (ptr, len), self.limits.fuel_base, deadline)?;
+        validate_overlap(requested, crate::manifest::MAX_OVERLAP)
     }
 
     pub(crate) fn instantiate(&self, deadline: &Deadline) -> Result<Live> {
@@ -261,6 +295,11 @@ impl Plugin {
     }
 }
 
+fn validate_overlap(requested: i32, maximum: u32) -> Result<u32> {
+    let value = u32::try_from(requested).ok().filter(|value| *value <= maximum);
+    value.ok_or_else(|| Error::Limit(format!("overlap budget (pc_overlap requested {requested} pixels; this host supports 0..={maximum})")))
+}
+
 /// `pc_filter(buf_ptr, buf_len, width, height, channels, format, params_ptr, params_len)`.
 type FilterArgs = (i32, i32, i32, i32, i32, i32, i32, i32);
 
@@ -280,6 +319,8 @@ fn placeholder_manifest() -> Manifest {
         author: String::new(),
         params: Vec::new(),
         overlap: 0,
+        clamp_context: false,
+        clamp_context_when: None,
         area: crate::Area::Content,
         guide: None,
         preset_selector: None,
@@ -289,5 +330,20 @@ fn placeholder_manifest() -> Manifest {
         groups: Vec::new(),
         labels: Vec::new(),
         visibility: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_overlap;
+
+    #[test]
+    fn desktop_and_web_overlap_policies_never_truncate() {
+        assert_eq!(validate_overlap(1500, 1536).unwrap(), 1500);
+        assert_eq!(validate_overlap(1536, 1536).unwrap(), 1536);
+        assert!(validate_overlap(1537, 1536).is_err());
+        assert_eq!(validate_overlap(256, 256).unwrap(), 256);
+        assert!(validate_overlap(1500, 256).is_err());
+        assert!(validate_overlap(-1, 1536).is_err());
     }
 }
