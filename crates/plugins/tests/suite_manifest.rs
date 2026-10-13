@@ -63,6 +63,29 @@ fn old_manifests_keep_group_behavior_without_conditional_metadata() {
     assert_eq!(manifest.group("amount"), Some("Main"));
     assert_eq!(manifest.tabs(), ["Main"]);
     assert_eq!(manifest.always_visible(), ["mode"]);
+    assert!(manifest.preset_preserve.is_empty());
+}
+
+#[test]
+fn builtin_preset_preserve_accepts_known_unique_keys_and_explicit_overrides() {
+    let mut value = suite(json!({
+        "effect":{"type":"choice","options":["fur","fire"]},
+        "coat":{"type":"choice","options":["plain","tiger"]},
+        "length":{"type":"number","min":1,"max":60,"default":12}
+    }));
+    value["presetSelector"] = json!("effect");
+    value["presetPreserve"] = json!(["coat"]);
+    value["presets"] = json!({"Long":{"effect":"fur","length":40},"Tiger":{"effect":"fur","coat":"tiger"}});
+    let manifest = parse(&value).unwrap();
+    assert_eq!(manifest.preset_preserve, ["coat"]);
+    assert!(!manifest.presets["Long"].contains_key("coat"));
+    assert_eq!(manifest.presets["Tiger"]["coat"], json!("tiger"));
+    let encoded = serde_json::to_value(&manifest).unwrap();
+    assert_eq!(encoded["presetPreserve"], json!(["coat"]));
+    for keys in [json!(["missing"]), json!(["coat", "coat"]), json!(["effect"]), json!("coat"), json!([null])] {
+        value["presetPreserve"] = keys.clone();
+        assert!(parse(&value).is_err(), "invalid preserve keys: {keys}");
+    }
 }
 
 fn suite(params: serde_json::Value) -> serde_json::Value {
