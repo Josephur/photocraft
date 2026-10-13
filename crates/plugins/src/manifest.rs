@@ -12,7 +12,8 @@ pub const MAX_PARAMS: usize = 256;
 /// Range of a `point` coordinate: percent of the canvas width or height.
 pub const POINT_RANGE: (f64, f64) = (0.0, 100.0);
 /// Largest neighbourhood (`overlap`) a plug-in may ask for, in pixels.
-pub const MAX_OVERLAP: u32 = 256;
+/// Browser runs retain the smaller bound because they have no native wall-clock deadline.
+pub const MAX_OVERLAP: u32 = if cfg!(target_arch = "wasm32") { 256 } else { 1536 };
 /// Longest parameter `group` (a dialog tab label), in characters.
 pub const MAX_GROUP_CHARS: usize = 32;
 
@@ -102,6 +103,13 @@ pub struct Manifest {
     /// Pixels of context the filter needs around each output pixel (0 = point filter).
     #[serde(default)]
     pub overlap: u32,
+    /// Opt into clipped context and explicit `_image.output*` coordinates. Existing plug-ins
+    /// retain symmetric margins unless they declare support for the clipped-buffer contract.
+    #[serde(default)]
+    pub clamp_context: bool,
+    /// Optional choice scope restricting which settings support clipped source context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clamp_context_when: Option<SelectionShape>,
     #[serde(default)]
     pub area: Area,
     /// Optional dotted guide line the dialog draws on the canvas between two `point` params.
@@ -178,6 +186,14 @@ impl Manifest {
         self.selection_shape
             .as_ref()
             .is_some_and(|shape| resolved.get(&shape.parameter).and_then(Value::as_str).is_some_and(|value| shape.values.iter().any(|v| v == value)))
+    }
+
+    /// Whether these resolved parameters support explicit output rectangles and clipped input.
+    pub fn uses_clamped_context(&self, resolved: &Map<String, Value>) -> bool {
+        self.clamp_context
+            && self.clamp_context_when.as_ref().is_none_or(|condition| {
+                resolved.get(&condition.parameter).and_then(Value::as_str).is_some_and(|value| condition.values.iter().any(|v| v == value))
+            })
     }
 
     /// Parses and validates manifest JSON.
@@ -286,7 +302,8 @@ impl Manifest {
                 _ => {}
             }
         }
-        if let Some(shape) = &self.selection_shape {
+        for (field, condition) in [("selectionShape", self.selection_shape.as_ref()), ("clampContextWhen", self.clamp_context_when.as_ref())] {
+            let Some(shape) = condition else { continue };
             let options = self
                 .params
                 .iter()
@@ -294,13 +311,13 @@ impl Manifest {
                     ParamSpec::Choice { options, .. } if key == &shape.parameter && self.visible_when(key).is_none() => Some(options),
                     _ => None,
                 })
-                .ok_or_else(|| Error::Manifest("`selectionShape.parameter` must name an unconditional choice".into()))?;
+                .ok_or_else(|| Error::Manifest(format!("`{field}.parameter` must name an unconditional choice")))?;
             if shape.values.is_empty() || shape.values.len() > 64 {
-                return Err(Error::Manifest("`selectionShape.values` must contain 1-64 choices".into()));
+                return Err(Error::Manifest(format!("`{field}.values` must contain 1-64 choices")));
             }
             let mut seen = std::collections::BTreeSet::new();
             if shape.values.iter().any(|value| !options.contains(value) || !seen.insert(value)) {
-                return Err(Error::Manifest("`selectionShape.values` must be unique supported choices".into()));
+                return Err(Error::Manifest(format!("`{field}.values` must be unique supported choices")));
             }
         }
         if self.preset_preserve.len() > MAX_PARAMS {
