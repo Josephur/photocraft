@@ -8,11 +8,12 @@ use crate::{Error, Result};
 /// Longest manifest the host reads.
 pub const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 /// Most parameters a plug-in may declare.
-pub const MAX_PARAMS: usize = 64;
+pub const MAX_PARAMS: usize = 256;
 /// Range of a `point` coordinate: percent of the canvas width or height.
 pub const POINT_RANGE: (f64, f64) = (0.0, 100.0);
 /// Largest neighbourhood (`overlap`) a plug-in may ask for, in pixels.
-pub const MAX_OVERLAP: u32 = 256;
+/// Browser runs retain the smaller bound because they have no native wall-clock deadline.
+pub const MAX_OVERLAP: u32 = if cfg!(target_arch = "wasm32") { 256 } else { 1536 };
 /// Longest parameter `group` (a dialog tab label), in characters.
 pub const MAX_GROUP_CHARS: usize = 32;
 
@@ -102,15 +103,51 @@ pub struct Manifest {
     /// Pixels of context the filter needs around each output pixel (0 = point filter).
     #[serde(default)]
     pub overlap: u32,
+    /// Opt into clipped context and explicit `_image.output*` coordinates. Existing plug-ins
+    /// retain symmetric margins unless they declare support for the clipped-buffer contract.
+    #[serde(default)]
+    pub clamp_context: bool,
+    /// Optional choice scope restricting which settings support clipped source context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clamp_context_when: Option<SelectionShape>,
     #[serde(default)]
     pub area: Area,
     /// Optional dotted guide line the dialog draws on the canvas between two `point` params.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guide: Option<Guide>,
+    /// Optional unconditional choice parameter used by UIs to scope effect presets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_selector: Option<String>,
+    /// Choice values for which a selection supplies the filter's input silhouette.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_shape: Option<SelectionShape>,
+    /// Keys a built-in preset leaves unchanged unless it explicitly supplies them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub preset_preserve: Vec<String>,
+    /// Immutable named factory settings shipped by the plug-in.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub presets: crate::presets::Presets,
     /// Each parameter's optional `"group"` (the dialog tab it sits on), in `params` order; `None`
-    /// keeps the parameter above the tabs, always visible. Read by [`Manifest::parse`].
+    /// keeps the parameter above the tabs. Read by [`Manifest::parse`].
     #[serde(skip)]
     pub groups: Vec<Option<String>>,
+    /// Per-parameter labels, kept in manifest parameter order. Parsed by [`Manifest::parse`].
+    #[doc(hidden)]
+    #[serde(skip)]
+    pub labels: Vec<Option<String>>,
+    /// Per-parameter visibility predicates, kept in manifest parameter order.
+    #[doc(hidden)]
+    #[serde(skip)]
+    pub visibility: Vec<Option<Map<String, Value>>>,
+}
+
+/// Opt-in selection geometry for shape effects in a filter suite. Other choices keep ordinary
+/// selection clipping. The selector must be an unconditional choice and values must be unique.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionShape {
+    pub parameter: String,
+    pub values: Vec<String>,
 }
 
 /// A dotted line between two `point` parameters (`"guide": {"from": "start", "to": "end"}`).
@@ -144,6 +181,21 @@ pub fn clamp_point(x: f64, y: f64) -> Option<[f64; 2]> {
 }
 
 impl Manifest {
+    /// Whether these already-resolved parameters opt into selection-as-input geometry.
+    pub fn uses_selection_shape(&self, resolved: &Map<String, Value>) -> bool {
+        self.selection_shape
+            .as_ref()
+            .is_some_and(|shape| resolved.get(&shape.parameter).and_then(Value::as_str).is_some_and(|value| shape.values.iter().any(|v| v == value)))
+    }
+
+    /// Whether these resolved parameters support explicit output rectangles and clipped input.
+    pub fn uses_clamped_context(&self, resolved: &Map<String, Value>) -> bool {
+        self.clamp_context
+            && self.clamp_context_when.as_ref().is_none_or(|condition| {
+                resolved.get(&condition.parameter).and_then(Value::as_str).is_some_and(|value| condition.values.iter().any(|v| v == value))
+            })
+    }
+
     /// Parses and validates manifest JSON.
     pub fn parse(bytes: &[u8]) -> Result<Manifest> {
         if bytes.len() > MAX_MANIFEST_BYTES {
@@ -151,9 +203,45 @@ impl Manifest {
         }
         let text = std::str::from_utf8(bytes).map_err(|_| Error::Manifest("manifest is not UTF-8".into()))?;
         let mut man: Manifest = serde_json::from_str(text).map_err(|e| Error::Manifest(format!("manifest: {e}")))?;
-        let groups: ParamGroups = serde_json::from_str(text).map_err(|e| Error::Manifest(format!("manifest: {e}")))?;
-        man.groups = groups.params.into_iter().map(|g| g.map(|g| g.trim().to_string())).collect();
+        let metadata: ParamMetadata = serde_json::from_str(text).map_err(|e| Error::Manifest(format!("manifest: {e}")))?;
+        // Check the original text before trimming: a trailing newline or tab is still invalid.
+        for ((key, _), entry) in man.params.iter().zip(&metadata.params) {
+            if let Some(label) = &entry.label
+                && !printable(label, 64)
+            {
+                return Err(Error::Manifest(format!("parameter `{key}`: `label` must be 1-64 printable characters")));
+            }
+        }
+        man.groups = metadata.params.iter().map(|p| p.group.as_ref().map(|g| g.trim().to_string())).collect();
+        man.labels = metadata.params.iter().map(|p| p.label.as_ref().map(|label| label.trim().to_string())).collect();
+        man.visibility = metadata.params.into_iter().map(|p| p.visible_when).collect();
         man.validate()?;
+        if man.presets.len() > crate::presets::MAX_PRESETS {
+            return Err(Error::Manifest("too many built-in presets".into()));
+        }
+        for (name, values) in &man.presets {
+            if !crate::presets::valid_name(name) {
+                return Err(Error::Manifest(format!("invalid built-in preset name {name:?}")));
+            }
+            if let Some(selector) = &man.preset_selector {
+                let supported = man.params.iter().find(|(key, _)| key == selector).is_some_and(|(_, spec)| {
+                    matches!(spec, ParamSpec::Choice { options, .. } if values.get(selector).and_then(Value::as_str).is_some_and(|v| options.iter().any(|o| o == v)))
+                });
+                if !supported {
+                    return Err(Error::Manifest(format!("built-in preset {name:?} must declare a valid `{selector}`")));
+                }
+            }
+        }
+        let mut presets = man.valid_presets(&man.presets);
+        if let Some(selector) = &man.preset_selector {
+            for values in presets.values_mut() {
+                let effect = values.get(selector).cloned();
+                values.retain(|key, _| {
+                    man.visible_when(key).and_then(|conditions| conditions.get(selector)).is_none_or(|expected| Some(expected) == effect.as_ref())
+                });
+            }
+        }
+        man.presets = presets;
         Ok(man)
     }
 
@@ -178,6 +266,11 @@ impl Manifest {
                 && !printable(g, MAX_GROUP_CHARS)
             {
                 return Err(Error::Manifest(format!("parameter `{k}`: `group` must be 1-{MAX_GROUP_CHARS} printable characters")));
+            }
+            if let Some(label) = self.label(k)
+                && !printable(label, 64)
+            {
+                return Err(Error::Manifest(format!("parameter `{k}`: `label` must be 1-64 printable characters")));
             }
             match spec {
                 ParamSpec::Number { min, max, default } => {
@@ -209,6 +302,79 @@ impl Manifest {
                 _ => {}
             }
         }
+        for (field, condition) in [("selectionShape", self.selection_shape.as_ref()), ("clampContextWhen", self.clamp_context_when.as_ref())] {
+            let Some(shape) = condition else { continue };
+            let options = self
+                .params
+                .iter()
+                .find_map(|(key, spec)| match spec {
+                    ParamSpec::Choice { options, .. } if key == &shape.parameter && self.visible_when(key).is_none() => Some(options),
+                    _ => None,
+                })
+                .ok_or_else(|| Error::Manifest(format!("`{field}.parameter` must name an unconditional choice")))?;
+            if shape.values.is_empty() || shape.values.len() > 64 {
+                return Err(Error::Manifest(format!("`{field}.values` must contain 1-64 choices")));
+            }
+            let mut seen = std::collections::BTreeSet::new();
+            if shape.values.iter().any(|value| !options.contains(value) || !seen.insert(value)) {
+                return Err(Error::Manifest(format!("`{field}.values` must be unique supported choices")));
+            }
+        }
+        if self.preset_preserve.len() > MAX_PARAMS {
+            return Err(Error::Manifest("too many `presetPreserve` keys".into()));
+        }
+        let mut preserved = std::collections::BTreeSet::new();
+        for key in &self.preset_preserve {
+            if !self.params.iter().any(|(name, _)| name == key) || !preserved.insert(key) || self.preset_selector.as_ref() == Some(key) {
+                return Err(Error::Manifest("`presetPreserve` must contain unique known parameters other than the preset selector".into()));
+            }
+        }
+        for (key, _) in &self.params {
+            let Some(conditions) = self.visible_when(key) else { continue };
+            if conditions.is_empty() || conditions.len() > 8 {
+                return Err(Error::Manifest(format!("parameter `{key}`: `visibleWhen` must contain 1-8 predicates")));
+            }
+            for (controller, expected) in conditions {
+                if controller == key {
+                    return Err(Error::Manifest(format!("parameter `{key}`: `visibleWhen` cannot reference itself")));
+                }
+                let Some((_, spec)) = self.params.iter().find(|(param, _)| param == controller) else {
+                    return Err(Error::Manifest(format!("parameter `{key}`: `visibleWhen` references missing parameter `{controller}`")));
+                };
+                match spec {
+                    ParamSpec::Choice { options, .. } => {
+                        if !expected.as_str().is_some_and(|value| options.iter().any(|option| option == value)) {
+                            return Err(Error::Manifest(format!(
+                                "parameter `{key}`: `visibleWhen` value for choice `{controller}` must match one of its options"
+                            )));
+                        }
+                    }
+                    ParamSpec::Bool { .. } => {
+                        if !expected.is_boolean() {
+                            return Err(Error::Manifest(format!("parameter `{key}`: `visibleWhen` value for boolean `{controller}` must be true or false")));
+                        }
+                    }
+                    _ => return Err(Error::Manifest(format!("parameter `{key}`: `visibleWhen` parameter `{controller}` must be a choice or boolean"))),
+                }
+                if let Some(parent_conditions) = self.visible_when(controller)
+                    && parent_conditions.iter().any(|(parent, value)| conditions.get(parent) != Some(value))
+                {
+                    return Err(Error::Manifest(format!(
+                        "parameter `{key}`: `visibleWhen` must include all predicates that show conditional controller `{controller}`"
+                    )));
+                }
+            }
+        }
+        // The subset rule also excludes cycles: each edge in a cycle would require the
+        // next controller's predicates, ultimately including the dependent's own key.
+        if let Some(selector) = &self.preset_selector {
+            let Some((_, spec)) = self.params.iter().find(|(key, _)| key == selector) else {
+                return Err(Error::Manifest(format!("`presetSelector` references missing parameter `{selector}`")));
+            };
+            if !matches!(spec, ParamSpec::Choice { .. }) || self.visible_when(selector).is_some() {
+                return Err(Error::Manifest("`presetSelector` must name an unconditional choice parameter".into()));
+            }
+        }
         if let Some(g) = &self.guide {
             let is_point = |name: &str| self.params.iter().any(|(k, s)| k == name && matches!(s, ParamSpec::Point { .. }));
             if g.from == g.to || !is_point(&g.from) || !is_point(&g.to) {
@@ -222,6 +388,19 @@ impl Manifest {
     pub fn group(&self, key: &str) -> Option<&str> {
         let i = self.params.iter().position(|(k, _)| k == key)?;
         self.groups.get(i)?.as_deref()
+    }
+
+    /// The optional dialog label for parameter `key`.
+    pub fn label(&self, key: &str) -> Option<&str> {
+        let i = self.params.iter().position(|(k, _)| k == key)?;
+        self.labels.get(i)?.as_deref()
+    }
+
+    /// The optional equality predicates that control whether parameter `key` is shown.
+    /// Every predicate must match for the parameter to be visible.
+    pub fn visible_when(&self, key: &str) -> Option<&Map<String, Value>> {
+        let i = self.params.iter().position(|(k, _)| k == key)?;
+        self.visibility.get(i)?.as_ref()
     }
 
     /// The dialog's tabs: each distinct `group`, in the order it first appears in `params`.
@@ -357,22 +536,27 @@ fn ordered_params<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result
     d.deserialize_any(V)
 }
 
-/// The `group` of each parameter, in manifest order (a second, lenient read of the manifest).
+/// Dialog-only metadata for each parameter, in manifest order (a second read of the manifest).
 #[derive(Deserialize)]
-struct ParamGroups {
-    #[serde(default, deserialize_with = "ordered_groups")]
-    params: Vec<Option<String>>,
+struct ParamMetadata {
+    #[serde(default, deserialize_with = "ordered_metadata")]
+    params: Vec<ParamMetadataEntry>,
 }
 
-fn ordered_groups<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Vec<Option<String>>, D::Error> {
-    #[derive(Deserialize)]
-    struct Entry {
-        #[serde(default)]
-        group: Option<String>,
-    }
+#[derive(Deserialize)]
+struct ParamMetadataEntry {
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default, rename = "visibleWhen")]
+    visible_when: Option<Map<String, Value>>,
+}
+
+fn ordered_metadata<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Vec<ParamMetadataEntry>, D::Error> {
     struct V;
     impl<'de> serde::de::Visitor<'de> for V {
-        type Value = Vec<Option<String>>;
+        type Value = Vec<ParamMetadataEntry>;
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             f.write_str("an object of parameter specs")
         }
@@ -381,8 +565,8 @@ fn ordered_groups<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result
         }
         fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> std::result::Result<Self::Value, A::Error> {
             let mut out = Vec::new();
-            while let Some((_, e)) = map.next_entry::<String, Entry>()? {
-                out.push(e.group);
+            while let Some((_, entry)) = map.next_entry::<String, ParamMetadataEntry>()? {
+                out.push(entry);
             }
             Ok(out)
         }
