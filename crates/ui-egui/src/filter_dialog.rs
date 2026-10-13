@@ -254,10 +254,12 @@ const FULL_RESOLUTION_PREVIEW: &[&str] = &[
 
 /// Whether `command` with `params` previews at full resolution: [`FULL_RESOLUTION_PREVIEW`], every
 /// Filter Gallery filter (its strokes, grain and textures are sized in pixels; the settings are
-/// abstract levels, not lengths) and the dithered colour-mode conversions (Indexed Color, Bitmap).
+/// abstract levels, not lengths), plug-ins (their schemas do not declare pixel units), and the
+/// dithered colour-mode conversions (Indexed Color, Bitmap).
 fn full_resolution_preview(command: &str, params: &Value) -> bool {
     let choice = |key: &str| params.get(key).and_then(Value::as_str);
     FULL_RESOLUTION_PREVIEW.contains(&command)
+        || command == "plugin.run"
         || command.starts_with("filter.gallery.")
         || (command == "image.mode.indexedColor" && choice("dither") != Some("none"))
         || (command == "image.mode.bitmap" && !matches!(choice("method"), Some("threshold" | "threshold50")))
@@ -1807,6 +1809,24 @@ mod tests {
         // Without dithering, the colour-mode conversions keep the proxy.
         assert_eq!(preview_factor("image.mode.indexedColor", &json!({"dither": "none"}), 4), 4);
         assert_eq!(preview_factor("image.mode.bitmap", &json!({"method": "threshold"}), 4), 4);
+    }
+
+    /// Plug-in schemas do not declare which controls or internal details use document pixels.
+    /// A reduced proxy therefore enlarges bevels, shadows and textures relative to Apply.
+    #[test]
+    fn plugin_previews_keep_document_pixel_scale_without_a_units_contract() {
+        for params in [
+            json!({"id": "test.preview-scale", "effect": "bevel", "bevel_size": 8.0}),
+            json!({"id": "test.preview-scale", "params": {"effect": "shadow", "shadow_distance": 15.0}}),
+            json!({"id": "test.preview-scale"}),
+        ] {
+            for requested in [1, 2, 3, 8] {
+                assert_eq!(preview_factor("plugin.run", &params, requested), 1, "{params}, factor {requested}");
+            }
+        }
+        // Built-ins whose pixel controls can be scaled retain their reduced previews.
+        assert_eq!(preview_factor("filter.blur.gaussianBlur", &json!({"radius": 8.0}), 4), 4);
+        assert_eq!(preview_factor("filter.pixelate.mosaic", &json!({"cellSize": 10.0}), 4), 2);
     }
 
     /// #2063: proxy previews scaled what isn't a length (Tree's canvas fraction, Lens Correction's

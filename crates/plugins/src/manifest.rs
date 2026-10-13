@@ -110,6 +110,12 @@ pub struct Manifest {
     /// Optional unconditional choice parameter used by UIs to scope effect presets.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset_selector: Option<String>,
+    /// Choice values for which a selection supplies the filter's input silhouette.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_shape: Option<SelectionShape>,
+    /// Keys a built-in preset leaves unchanged unless it explicitly supplies them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub preset_preserve: Vec<String>,
     /// Immutable named factory settings shipped by the plug-in.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub presets: crate::presets::Presets,
@@ -125,6 +131,15 @@ pub struct Manifest {
     #[doc(hidden)]
     #[serde(skip)]
     pub visibility: Vec<Option<Map<String, Value>>>,
+}
+
+/// Opt-in selection geometry for shape effects in a filter suite. Other choices keep ordinary
+/// selection clipping. The selector must be an unconditional choice and values must be unique.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionShape {
+    pub parameter: String,
+    pub values: Vec<String>,
 }
 
 /// A dotted line between two `point` parameters (`"guide": {"from": "start", "to": "end"}`).
@@ -158,6 +173,13 @@ pub fn clamp_point(x: f64, y: f64) -> Option<[f64; 2]> {
 }
 
 impl Manifest {
+    /// Whether these already-resolved parameters opt into selection-as-input geometry.
+    pub fn uses_selection_shape(&self, resolved: &Map<String, Value>) -> bool {
+        self.selection_shape
+            .as_ref()
+            .is_some_and(|shape| resolved.get(&shape.parameter).and_then(Value::as_str).is_some_and(|value| shape.values.iter().any(|v| v == value)))
+    }
+
     /// Parses and validates manifest JSON.
     pub fn parse(bytes: &[u8]) -> Result<Manifest> {
         if bytes.len() > MAX_MANIFEST_BYTES {
@@ -262,6 +284,32 @@ impl Manifest {
                     return Err(Error::Manifest(format!("parameter `{k}`: color default must be a \"#rrggbb\" hex string, not {default:?}")));
                 }
                 _ => {}
+            }
+        }
+        if let Some(shape) = &self.selection_shape {
+            let options = self
+                .params
+                .iter()
+                .find_map(|(key, spec)| match spec {
+                    ParamSpec::Choice { options, .. } if key == &shape.parameter && self.visible_when(key).is_none() => Some(options),
+                    _ => None,
+                })
+                .ok_or_else(|| Error::Manifest("`selectionShape.parameter` must name an unconditional choice".into()))?;
+            if shape.values.is_empty() || shape.values.len() > 64 {
+                return Err(Error::Manifest("`selectionShape.values` must contain 1-64 choices".into()));
+            }
+            let mut seen = std::collections::BTreeSet::new();
+            if shape.values.iter().any(|value| !options.contains(value) || !seen.insert(value)) {
+                return Err(Error::Manifest("`selectionShape.values` must be unique supported choices".into()));
+            }
+        }
+        if self.preset_preserve.len() > MAX_PARAMS {
+            return Err(Error::Manifest("too many `presetPreserve` keys".into()));
+        }
+        let mut preserved = std::collections::BTreeSet::new();
+        for key in &self.preset_preserve {
+            if !self.params.iter().any(|(name, _)| name == key) || !preserved.insert(key) || self.preset_selector.as_ref() == Some(key) {
+                return Err(Error::Manifest("`presetPreserve` must contain unique known parameters other than the preset selector".into()));
             }
         }
         for (key, _) in &self.params {

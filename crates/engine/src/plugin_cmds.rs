@@ -84,6 +84,11 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
                 Ok(())
             }
             LayerContent::Smart(_) => {
+                if selection.is_some() && resolved.as_object().is_some_and(|params| plugin.manifest().uses_selection_shape(params)) {
+                    return Err(EngineError::Other(
+                        "This effect needs a pixel layer when a selection is active. Rasterize the smart object or clear the selection.".into(),
+                    ));
+                }
                 let sf = SmartFilter {
                     command: RUN.into(),
                     params: json!({"id": id, "params": resolved}),
