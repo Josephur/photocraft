@@ -351,6 +351,9 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     // OK / Cancel buttons stay inside a small window. The preview window below the
                     // parameters reserves its own space (#3769).
                     let mut room = (ctx.content_rect().height() - DIALOG_CHROME - crate::filter_preview_ui::reserved_height(&fields)).max(120.0);
+                    let top = ui.cursor().top();
+                    crate::filter_dialog::selector_body(ui, &mut fields);
+                    room = (room - (ui.cursor().top() - top)).max(120.0);
                     // Plug-in dialogs: the plug-in's saved presets, above its parameters.
                     if crate::plugin_presets_ui::owns(&fields) {
                         let top = ui.cursor().top();
