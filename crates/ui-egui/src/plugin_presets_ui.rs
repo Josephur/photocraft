@@ -96,12 +96,21 @@ fn in_effect(m: &Manifest, f: &Map<String, Value>, key: &str) -> bool {
     m.visible_when(key).and_then(|conditions| conditions.get(selector)).is_none_or(|expected| expected.as_str() == Some(current))
 }
 
-fn matches_values(m: &Manifest, f: &Map<String, Value>, values: &Map<String, Value>) -> bool {
+/// Factory recipes can leave material choices independent of their style settings.
+/// Explicit recipe values always apply, and saved user presets remain complete snapshots.
+fn retains_current(m: &Manifest, source: &str, values: &Map<String, Value>, key: &str) -> bool {
+    source == "builtin" && !values.contains_key(key) && m.preset_preserve.iter().any(|preserved| preserved == key)
+}
+
+fn matches_values(m: &Manifest, f: &Map<String, Value>, source: &str, values: &Map<String, Value>) -> bool {
     if !matches_effect(m, f, values) {
         return false;
     }
     let Ok(resolved) = m.resolve_params(&Value::Object(values.clone())) else { return false };
-    resolved.iter().filter(|(key, _)| in_effect(m, f, key)).all(|(key, value)| f.get(key).is_some_and(|current| same_control_value(current, value)))
+    resolved
+        .iter()
+        .filter(|(key, _)| in_effect(m, f, key) && !retains_current(m, source, values, key))
+        .all(|(key, value)| f.get(key).is_some_and(|current| same_control_value(current, value)))
 }
 
 /// Controls round-trip numbers through f32 while manifest defaults are parsed as f64.
@@ -115,7 +124,8 @@ fn same_control_value(current: &Value, expected: &Value) -> bool {
 }
 
 /// Puts the preset `name`'s values into the dialog; parameters it doesn't set go back to their
-/// defaults within the selected effect. Other effects keep their values.
+/// defaults within the selected effect, except factory recipe `presetPreserve` controls.
+/// Other effects keep their values.
 pub fn apply(m: &Manifest, f: &mut Map<String, Value>, name: &str) -> bool {
     let source = if listed(f).contains_key(name) { "user" } else { "builtin" };
     apply_from(m, f, source, name)
@@ -130,8 +140,8 @@ pub fn apply_from(m: &Manifest, f: &mut Map<String, Value>, source: &str, name: 
     if !matches_effect(m, f, &values) {
         return false;
     }
-    let Ok(resolved) = m.resolve_params(&Value::Object(values)) else { return false };
-    let scoped: Map<String, Value> = resolved.into_iter().filter(|(key, _)| in_effect(m, f, key)).collect();
+    let Ok(resolved) = m.resolve_params(&Value::Object(values.clone())) else { return false };
+    let scoped: Map<String, Value> = resolved.into_iter().filter(|(key, _)| in_effect(m, f, key) && !retains_current(m, source, &values, key)).collect();
     f.extend(scoped);
     f.insert(CHOSEN.into(), json!(name));
     f.insert(SOURCE.into(), json!(source));
@@ -211,7 +221,7 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
     let mut chosen = f.get(CHOSEN).and_then(Value::as_str).unwrap_or_default().to_string();
     let mut source = f.get(SOURCE).and_then(Value::as_str).unwrap_or("user").to_string();
     let selected = if source == "builtin" { &builtins } else { &user_presets };
-    if !selected.get(&chosen).is_some_and(|values| matches_values(m, f, values)) {
+    if !selected.get(&chosen).is_some_and(|values| matches_values(m, f, &source, values)) {
         chosen.clear();
         source.clear();
         f.insert(CHOSEN.into(), json!(""));
@@ -429,14 +439,14 @@ mod tests {
         assert_eq!(f["bolt_width"], json!(11.0));
         assert_eq!(f["shadow_softness"], json!(29.0));
         assert_eq!(f["fire_detail"], json!(47.0), "hidden substyle values apply with the preset");
-        assert!(matches_values(&m, &f, &listed(&f)["Fire"]));
+        assert!(matches_values(&m, &f, "user", &listed(&f)["Fire"]));
         f.insert("shadow_softness".into(), json!(51.0));
-        assert!(matches_values(&m, &f, &listed(&f)["Fire"]), "another effect's values do not mark this preset Custom");
+        assert!(matches_values(&m, &f, "user", &listed(&f)["Fire"]), "another effect's values do not mark this preset Custom");
         save_as(&mut app, &m, &mut f, "My Fire").unwrap();
         let saved = STORE.lock().unwrap().as_ref().unwrap()["My Fire"].clone();
         assert_eq!(Value::Object(saved), json!({"effect": "fire", "fire_style": "soft", "fire_amount": 32.0, "fire_detail": 47.0}));
         f.insert("fire_amount".into(), json!(44.0));
-        assert!(!matches_values(&m, &f, &listed(&f)["My Fire"]), "editing current controls returns the row to Custom");
+        assert!(!matches_values(&m, &f, "user", &listed(&f)["My Fire"]), "editing current controls returns the row to Custom");
         save_as(&mut app, &m, &mut f, "My Fire").unwrap();
         assert_eq!(STORE.lock().unwrap().as_ref().unwrap()["My Fire"]["fire_amount"], json!(44.0), "same-effect names can be replaced");
         delete(&mut app, &m, &mut f, "My Fire").unwrap();
@@ -491,6 +501,54 @@ mod tests {
     }
 
     #[test]
+    fn builtin_styles_keep_material_choices_and_saved_presets_restore_them() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        *STORE.lock().unwrap() = None;
+        let m = Manifest::parse(
+            br##"{"id":"org.example.fur","name":"Fur","kind":"filter",
+            "presetSelector":"effect","presetPreserve":["coat","colour"],"params":{
+                "effect":{"type":"choice","options":["fur","fire"]},
+                "coat":{"type":"choice","options":["plain","zebra","tiger"],"default":"plain","visibleWhen":{"effect":"fur"}},
+                "colour":{"type":"color","default":"#cc9955","visibleWhen":{"effect":"fur"}},
+                "length":{"type":"number","min":1,"max":60,"default":12,"visibleWhen":{"effect":"fur"}},
+                "density":{"type":"number","min":10,"max":100,"default":65,"visibleWhen":{"effect":"fur"}},
+                "heat":{"type":"number","min":0,"max":100,"default":20,"visibleWhen":{"effect":"fire"}}},
+            "presets":{"Short":{"effect":"fur","length":4},"Long":{"effect":"fur","length":45},
+                "White tiger":{"effect":"fur","coat":"tiger","colour":"#eeeeee","length":20}}}"##,
+        )
+        .unwrap();
+        let mut app = app_with_store();
+        let mut f = m.resolve_params(&Value::Null).unwrap();
+        open_fields(&app, &m, &mut f);
+        f.insert("coat".into(), json!("zebra"));
+        f.insert("colour".into(), json!("#777777"));
+        f.insert("density".into(), json!(90.0));
+        f.insert("heat".into(), json!(77.0));
+        assert!(apply_from(&m, &mut f, "builtin", "Short"));
+        assert_eq!(f["coat"], json!("zebra"), "grooming does not replace the chosen coat");
+        assert_eq!(f["colour"], json!("#777777"));
+        assert_eq!(f["length"], json!(4.0));
+        assert_eq!(f["density"], json!(65.0), "other omitted controls still use their defaults");
+        assert_eq!(f["heat"], json!(77.0), "another effect's controls are untouched");
+        assert!(apply_from(&m, &mut f, "builtin", "Long"));
+        assert_eq!(f["coat"], json!("zebra"));
+        assert_eq!(f["length"], json!(45.0));
+        f.insert("coat".into(), json!("tiger"));
+        assert!(matches_values(&m, &f, "builtin", &m.presets["Long"]), "changing coat keeps the selected hair style");
+        save_as(&mut app, &m, &mut f, "My tiger").unwrap();
+        f.insert("coat".into(), json!("zebra"));
+        f.insert("colour".into(), json!("#ff8800"));
+        assert!(apply_from(&m, &mut f, "user", "My tiger"));
+        assert_eq!(f["coat"], json!("tiger"), "saved presets remain complete snapshots");
+        assert_eq!(f["colour"], json!("#777777"));
+        assert!(apply_from(&m, &mut f, "builtin", "White tiger"));
+        assert_eq!(f["coat"], json!("tiger"), "an explicit factory material value takes precedence");
+        assert_eq!(f["colour"], json!("#eeeeee"));
+        f.insert("coat".into(), json!("zebra"));
+        assert!(!matches_values(&m, &f, "builtin", &m.presets["White tiger"]));
+    }
+
+    #[test]
     fn plugin_preset_applies_params_on_every_tab() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let m = Manifest::parse(
@@ -533,8 +591,8 @@ mod tests {
         fields.insert("__spec".into(), json!(m.params_notation()));
         let mut h = egui_kittest::Harness::builder().build_ui_state(crate::filter_dialog::body, fields);
         h.run_steps(4);
-        assert!(matches_values(&m, h.state(), &m.presets["Decimal"]), "displaying unchanged decimal values preserves the selected preset");
+        assert!(matches_values(&m, h.state(), "builtin", &m.presets["Decimal"]), "displaying unchanged decimal values preserves the selected preset");
         h.state_mut().insert("amount".into(), json!(0.11));
-        assert!(!matches_values(&m, h.state(), &m.presets["Decimal"]), "a real edit still marks the preset Custom");
+        assert!(!matches_values(&m, h.state(), "builtin", &m.presets["Decimal"]), "a real edit still marks the preset Custom");
     }
 }

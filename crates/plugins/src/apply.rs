@@ -89,15 +89,22 @@ impl Plugin {
 
     /// Runs the filter on `surface` with user `params` (validated against the manifest) and
     /// returns the new surface. `canvas` is the document bounds; `selection` (coverage in
-    /// channel 0) limits and feathers the result, as for built-in filters.
+    /// channel 0) normally limits and feathers the result. Opt-in `selectionShape` choices
+    /// instead use it as the input silhouette, composite onto the unselected source, and permit
+    /// the effect to extend outside the selection by at most the declared overlap.
     pub fn apply(&self, surface: &Surface, canvas: Rect, selection: Option<&Surface>, params: &Value) -> Result<Surface> {
         let resolved = self.manifest().resolve_params(params)?;
-        let area = self.output_area(surface, canvas, selection);
+        let shape = selection.filter(|_| self.manifest().uses_selection_shape(&resolved)).map(Surface::content_bounds);
+        let area = if let Some(bounds) = shape {
+            if bounds.is_empty() { Rect::EMPTY } else { self.output_area(surface, canvas, None).intersect(&bounds.inflate(self.manifest().overlap as i32)) }
+        } else {
+            self.output_area(surface, canvas, selection)
+        };
         let mut out = surface.clone();
         if area.is_empty() {
             return Ok(out);
         }
-        let fmt = surface.format();
+        let fmt = PixelFormat { alpha: surface.format().alpha || shape.is_some(), ..surface.format() };
         let n = fmt.channels();
         let ov = self.manifest().overlap as i32;
         let extent = canvas.union(&surface.content_bounds());
@@ -122,7 +129,7 @@ impl Plugin {
             }
         }
         let deadline = Deadline::new(self.limits());
-        let ctx = BandCtx { surface, extent, canvas, selection, fmt, ov, params: Value::Object(resolved) };
+        let ctx = BandCtx { surface, extent, canvas, selection, shape, fmt, ov, params: Value::Object(resolved) };
         let run = |b: &Rect| {
             let r = self.run_band(&ctx, *b, &deadline).map(|data| encode_band(surface, *b, &data));
             if let Err(error) = &r {
@@ -156,28 +163,45 @@ impl Plugin {
     fn run_band(&self, c: &BandCtx, band: Rect, deadline: &Deadline) -> Result<Vec<f32>> {
         let n = c.fmt.channels();
         let input = band.inflate(c.ov);
-        let mut data = read_clamped(c.surface, input, c.extent);
+        let orig_full = read_clamped(c.surface, input, c.extent);
+        let source_n = c.surface.channels();
+        let mut data = if c.shape.is_some() {
+            let coverage = c.selection.map(|s| s.read_region(input)).unwrap_or_default();
+            let selection_n = c.selection.map_or(1, Surface::channels);
+            let mut masked = Vec::with_capacity(orig_full.len() / source_n * n);
+            for (index, pixel) in orig_full.chunks_exact(source_n).enumerate() {
+                let alpha = if c.surface.format().alpha { pixel.last().copied().unwrap_or(0.0) } else { 1.0 };
+                masked.extend_from_slice(pixel.get(..n - 1).unwrap_or_default());
+                masked.push(unit(alpha) * unit(coverage.get(index * selection_n).copied().unwrap_or(0.0)));
+            }
+            masked
+        } else {
+            orig_full.clone()
+        };
         let (iw, ih) = (input.width(), input.height());
         let mut params = c.params.clone();
         if let Value::Object(m) = &mut params {
-            m.insert(
-                "_image".into(),
-                json!({
-                    "x": input.x0, "y": input.y0, "width": iw, "height": ih, "overlap": c.ov,
-                    "canvasWidth": c.canvas.width(), "canvasHeight": c.canvas.height(),
-                    "mode": mode_name(c.fmt.mode), "depth": format_code(c.fmt) & 0xff, "alpha": c.fmt.alpha, "channels": n,
-                }),
-            );
+            let mut context = json!({
+                "x": input.x0, "y": input.y0, "width": iw, "height": ih, "overlap": c.ov,
+                "canvasWidth": c.canvas.width(), "canvasHeight": c.canvas.height(),
+                "mode": mode_name(c.fmt.mode), "depth": format_code(c.fmt) & 0xff, "alpha": c.fmt.alpha, "channels": n,
+            });
+            if let Some(shape) = c.shape {
+                context["shapeX"] = json!(shape.x0);
+                context["shapeY"] = json!(shape.y0);
+                context["shapeWidth"] = json!(shape.width());
+                context["shapeHeight"] = json!(shape.height());
+            }
+            m.insert("_image".into(), context);
         }
         let pbytes = serde_json::to_vec(&params).map_err(|e| Error::Params(e.to_string()))?;
-        let orig_full = data.clone();
         let run =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.filter_buffer(&mut data, iw, ih, n as u32, format_code(c.fmt), &pbytes, deadline)));
         run.map_err(|_| Error::Trap("the runtime panicked".into()))??;
         // Keep the band (drop the overlap margins), sanitise and blend by the selection.
         let (bw, bh) = (band.width() as usize, band.height() as usize);
         let ov = c.ov as usize;
-        let mut out = vec![0.0f32; bw * bh * n];
+        let mut out = vec![0.0f32; bw * bh * source_n];
         let sel_row = c.selection.map(|s| s.format().channels());
         let mut sel = Vec::new();
         let int_depth = c.fmt.sample != SampleType::F32;
@@ -188,8 +212,17 @@ impl Plugin {
             }
             for col in 0..bw {
                 let si = ((row + ov) * (bw + 2 * ov) + col + ov) * n;
-                let di = (row * bw + col) * n;
+                let di = (row * bw + col) * source_n;
+                let original_index = ((row + ov) * (bw + 2 * ov) + col + ov) * source_n;
                 let k = if c.selection.is_some() { sel.get(col).copied().unwrap_or(0.0) } else { 1.0 };
+                if c.shape.is_some() {
+                    if let (Some(original), Some(filtered), Some(dst)) =
+                        (orig_full.get(original_index..original_index + source_n), data.get(si..si + n), out.get_mut(di..di + source_n))
+                    {
+                        composite_shape(original, filtered, dst, c.surface.format(), k);
+                    }
+                    continue;
+                }
                 for ch in 0..n {
                     let o = orig_full.get(si + ch).copied().unwrap_or(0.0);
                     let mut v = data.get(si + ch).copied().unwrap_or(o);
@@ -206,6 +239,48 @@ impl Plugin {
             }
         }
         Ok(out)
+    }
+}
+
+/// Sanitise untrusted coverage, treating non-finite coverage as empty.
+fn unit(value: f32) -> f32 {
+    if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 }
+}
+
+/// Replace the selected cut-out with its filtered result, keeping the unselected source below.
+/// The remainder is conditional coverage: `a = selected + remainder * (1 - selected)`.
+/// Simply source-overing onto the original doubles partially transparent input alpha; applying
+/// the selection again instead would square feather coverage and clip outer shadows/glows.
+fn composite_shape(original: &[f32], filtered: &[f32], dst: &mut [f32], fmt: PixelFormat, coverage: f32) {
+    let colors = fmt.mode.color_channels();
+    let alpha = if fmt.alpha { unit(original.get(colors).copied().unwrap_or(0.0)) } else { 1.0 };
+    let selected = alpha * unit(coverage);
+    let value = |ch: usize| {
+        let initial = if ch == colors { selected } else { original.get(ch).copied().unwrap_or(0.0) };
+        let filtered = filtered.get(ch).copied().filter(|v| v.is_finite()).unwrap_or(initial);
+        if ch == colors || fmt.sample != SampleType::F32 { filtered.clamp(0.0, 1.0) } else { filtered }
+    };
+    // Preserve hidden colour and exact source encodings for identity effects, including empty
+    // source pixels and a no-op in a feathered selection.
+    if (0..colors).all(|ch| value(ch) == original.get(ch).copied().unwrap_or(0.0)) && value(colors) == selected {
+        dst.copy_from_slice(original);
+        return;
+    }
+    let foreground = value(colors);
+    let remainder = if selected < 1.0 { (alpha - selected) / (1.0 - selected) } else { 0.0 };
+    let behind = remainder * (1.0 - foreground);
+    let out_alpha = foreground + behind;
+    for (ch, target) in dst.iter_mut().take(colors).enumerate() {
+        *target = if out_alpha > 0.0 {
+            (value(ch) * foreground + original.get(ch).copied().unwrap_or(0.0) * behind) / out_alpha
+        } else {
+            original.get(ch).copied().unwrap_or(0.0)
+        };
+    }
+    if fmt.alpha
+        && let Some(target) = dst.get_mut(colors)
+    {
+        *target = out_alpha;
     }
 }
 
@@ -229,6 +304,7 @@ struct BandCtx<'a> {
     extent: Rect,
     canvas: Rect,
     selection: Option<&'a Surface>,
+    shape: Option<Rect>,
     fmt: PixelFormat,
     ov: i32,
     params: Value,

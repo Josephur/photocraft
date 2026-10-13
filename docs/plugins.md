@@ -64,6 +64,7 @@ inside the settings folder (`PHOTOCRAFT_CONFIG_DIR`, the portable data folder, o
   range, unknown choices are dropped (the parameter keeps its default), and a preset with nothing
   usable left is skipped while the rest still load.
 - A plug-in may ship immutable factory settings in a top-level `presets` object mapping display names to parameter objects. These appear under **Built-in presets**, including when user storage is unavailable (such as the web build). With `presetSelector`, each built-in must explicitly include a supported selector value. Names and counts use the user-preset limits; values use the same normalization, bounds and schema filtering. The 64 KiB manifest limit still applies.
+- A top-level `presetPreserve` array may name parameters that built-in recipes leave unchanged when they omit those parameters. For example, hair-style recipes can retain the user's chosen coat type and colors. An explicitly supplied value still takes precedence. These retained controls do not mark the selected built-in recipe Custom when edited. Keys must be unique, refer to existing parameters, and exclude `presetSelector`. Omitted controls outside this list still reset to their defaults within the current effect. **Your presets** remain complete saved settings and are not affected by this list.
 - Stored settings appear under **Your presets** for the selected effect. **Save As…** always writes user settings, even when starting from a built-in. Identical names in the two sources remain distinct; **Delete** is available only for user settings. Without a user store, Save As and Delete are disabled.
 
 ## The sandbox
@@ -185,6 +186,39 @@ Manifests that omit these optional fields keep the existing dialog and preset be
   off-canvas layer content), and keeps only the inner rectangle of the result.
 - `area`: `"content"` (default) filters the layer's non-transparent bounds grown by `overlap`;
   `"canvas"` filters the whole canvas, including transparent pixels (for generators).
+
+#### Selections as shape geometry
+
+Ordinary filters receive the original layer pixels, and the selection clips and feathers their
+output. An effect suite whose effects need a silhouette can opt in per choice:
+
+```json
+"selectionShape": {"parameter": "effect", "values": ["bevel", "shadow", "glow"]}
+```
+
+The parameter must be an unconditional `choice`; values must contain 1–64 unique supported
+choices. When a selection is active and the resolved choice matches, the host multiplies the
+input alpha by selection coverage. RGB/Gray inputs without alpha gain a temporary alpha channel
+in the filter buffer; `channels`, `format`, and `_image.alpha` describe that actual buffer. The
+output surface retains its original format. Other document colour models remain in their own
+channel layout, with the same temporary-alpha rule.
+
+The filter sees a cut-out of the selected photo, including feathering and existing layer alpha.
+Its output is composited back into the photo, replacing the selected cut-out while preserving the
+unselected remainder. This avoids doubling source alpha or applying feather coverage twice.
+Effects may extend outside the selection by at most the declared `overlap`, within the filter's
+ordinary content/canvas output bounds; pixels beyond that region are unchanged. The selection
+mask has zero coverage outside its bounds, including in the band's neighbourhood pixels.
+
+`_image.shapeX`, `shapeY`, `shapeWidth`, and `shapeHeight` report the full selection's document
+bounds, identical in every band. Existing canvas and band coordinates keep their usual meaning.
+The extra geometry fields are omitted when shape selection is inactive. With no active selection,
+the plug-in sees the layer's original alpha and the usual filtering behavior.
+
+Preview and Apply dispatch the same engine command. Selected shape effects currently require a
+pixel layer: smart objects reject the operation with an actionable error because their shared
+smart-filter mask cannot retain per-effect input geometry. Clear the selection or rasterize the
+smart object explicitly before applying one. Existing ordinary smart filters are unaffected.
 
 #### Points on the canvas: `point` and `guide`
 

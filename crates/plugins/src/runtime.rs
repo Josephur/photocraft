@@ -283,6 +283,8 @@ fn placeholder_manifest() -> Manifest {
         area: crate::Area::Content,
         guide: None,
         preset_selector: None,
+        selection_shape: None,
+        preset_preserve: Vec::new(),
         presets: Default::default(),
         groups: Vec::new(),
         labels: Vec::new(),
