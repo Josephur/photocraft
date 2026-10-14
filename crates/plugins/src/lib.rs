@@ -22,6 +22,8 @@
 
 mod apply;
 pub mod manifest;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod native_8bf;
 pub mod presets;
 pub mod registry;
 mod runtime;

@@ -89,6 +89,8 @@ pub mod photo_cmds;
 pub mod pick_cmds;
 mod pixels;
 pub mod plugin_cmds;
+#[cfg(not(target_arch="wasm32"))]
+pub mod plugin_8bf_cmds;
 pub mod prefs;
 pub mod preset_import_cmds;
 pub mod preset_store;

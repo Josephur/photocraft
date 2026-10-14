@@ -198,7 +198,19 @@ pub(crate) fn sync_prefs(s: &Session) {
 #[cfg(not(target_arch = "wasm32"))]
 fn load_folder(folder: &str) -> Value {
     match registry::load_folder(std::path::Path::new(folder)) {
-        Ok(r) => json!({"folder": folder, "loaded": r.loaded, "failed": r.failed.iter().map(|(f, e)| json!({"file": f, "error": e})).collect::<Vec<_>>()}),
+        Ok(r) => {
+            // Native discovery only inspects PE/PiPL metadata; it never starts a worker.
+            let native = photocraft_plugins::native_8bf::load_folder(std::path::Path::new(folder));
+            match native {
+                Ok(native) => {
+                    json!({"folder": folder, "loaded": r.loaded, "failed": r.failed.iter().map(|(f, e)| json!({"file": f, "error": e})).collect::<Vec<_>>(),
+                    "native_loaded": native.loaded, "native_failed": native.failed.iter().map(|(f,e)|json!({"file":f,"error":e})).collect::<Vec<_>>()})
+                }
+                Err(e) => {
+                    json!({"folder": folder, "loaded": r.loaded, "failed": r.failed.iter().map(|(f, e)| json!({"file": f, "error": e})).collect::<Vec<_>>(), "native_error": e.to_string()})
+                }
+            }
+        }
         Err(e) => json!({"folder": folder, "error": e.to_string()}),
     }
 }
