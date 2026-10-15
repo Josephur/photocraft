@@ -55,15 +55,15 @@ fn rva_range_offset(bytes: &[u8], table: usize, sections: usize, rva: u32, len: 
     Err(invalid("PE RVA range is outside mapped sections"))
 }
 
-fn resource_bytes<'a>(
-    bytes: &'a [u8],
+fn resource_bytes(
+    bytes: &[u8],
     table: usize,
     sections: usize,
     resource_rva: u32,
     resource_size: usize,
     relative: usize,
     len: usize,
-) -> io::Result<&'a [u8]> {
+) -> io::Result<&[u8]> {
     let end = relative.checked_add(len).ok_or_else(|| invalid("PE resource offset overflow"))?;
     if end > resource_size {
         return Err(invalid("PE resource is outside resource directory"));
@@ -101,7 +101,7 @@ fn resource_directory_entries(
         count.checked_mul(8).ok_or_else(|| invalid("PE resource entry count overflow"))?,
     )?;
     let mut result = Vec::with_capacity(count);
-    for entry in entries.chunks_exact(8) {
+    for entry in entries.as_chunks::<8>().0 {
         result.push((
             u32::from_le_bytes(entry[0..4].try_into().map_err(|_| invalid("invalid PE resource entry"))?),
             u32::from_le_bytes(entry[4..8].try_into().map_err(|_| invalid("invalid PE resource entry"))?),
@@ -131,13 +131,14 @@ fn resource_name_is_pipl(bytes: &[u8], table: usize, sections: usize, resource_r
         length.checked_mul(2).ok_or_else(|| invalid("PE resource name overflow"))?,
     )?;
     let mut units = Vec::with_capacity(length);
-    for pair in raw.chunks_exact(2) {
+    for pair in raw.as_chunks::<2>().0 {
         units.push(u16::from_le_bytes([pair[0], pair[1]]));
     }
     let decoded = String::from_utf16(&units).map_err(|_| invalid("invalid UTF-16 PE resource name"))?;
     Ok(decoded.eq_ignore_ascii_case("PiPL"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_resource_payloads<'a>(
     bytes: &'a [u8],
     table: usize,
@@ -171,7 +172,7 @@ fn collect_resource_payloads<'a>(
     Ok(())
 }
 
-fn pipl_payloads<'a>(bytes: &'a [u8], table: usize, sections: usize, opt: usize, directory: usize, optional_len: usize) -> io::Result<Option<Vec<&'a [u8]>>> {
+fn pipl_payloads(bytes: &[u8], table: usize, sections: usize, opt: usize, directory: usize, optional_len: usize) -> io::Result<Option<Vec<&[u8]>>> {
     if optional_len < directory + 24 {
         return Ok(None);
     }
