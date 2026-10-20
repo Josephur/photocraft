@@ -3246,3 +3246,8 @@ curves	Smooth	Glätten
 	Behind	Dahinter
 	Blend	Mischen
 	Drag to set the direction	Ziehen, um die Richtung festzulegen
+
+# DDS Options (#1327)
+	DDS Options	DDS-Optionen
+	Compression	Komprimierung
+	Generate Mipmaps	Mipmaps erzeugen

@@ -3253,3 +3253,8 @@ curves	Smooth	Lisser
 	In Front	Devant
 	Behind	Derrière
 	Drag to set the direction	Faites glisser pour définir la direction
+
+# DDS Options (#1327)
+	DDS Options	Options DDS
+	Compression	Compression
+	Generate Mipmaps	Générer les mipmaps

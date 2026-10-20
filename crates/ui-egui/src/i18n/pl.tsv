@@ -3844,3 +3844,8 @@ curves	Smooth	Wygładź
 	In Front	Z przodu
 	Behind	Z tyłu
 	Drag to set the direction	Przeciągnij, aby ustawić kierunek
+
+# DDS Options (#1327)
+	DDS Options	Opcje DDS
+	Compression	Kompresja
+	Generate Mipmaps	Generuj mipmapy

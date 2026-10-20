@@ -3219,3 +3219,8 @@ curves	Smooth	Сгладить
 	In Front	Спереди
 	Behind	Сзади
 	Drag to set the direction	Перетащите, чтобы задать направление
+
+# DDS Options (#1327)
+	DDS Options	Параметры DDS
+	Compression	Сжатие
+	Generate Mipmaps	Создать MIP-карты
