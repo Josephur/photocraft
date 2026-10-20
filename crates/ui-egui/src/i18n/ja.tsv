@@ -3926,3 +3926,7 @@ curves	Smooth	スムーズ
 	Plug-in folders	プラグインフォルダー
 
 	Subfolders are included.	サブフォルダーも含まれます。
+# DDS Options (#1327)
+	DDS Options	DDS オプション
+	Compression	圧縮
+	Generate Mipmaps	ミップマップを生成

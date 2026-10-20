@@ -3949,3 +3949,6 @@ curves	Smooth	Εξομάλυνση
 	Plug-in folders	Φάκελοι πρόσθετων
 
 	Subfolders are included.	Περιλαμβάνονται οι υποφάκελοι.
+# DDS Options (#1327)
+	DDS Options	Επιλογές DDS
+	Generate Mipmaps	Δημιουργία mipmap

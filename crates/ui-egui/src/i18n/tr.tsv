@@ -3979,3 +3979,6 @@ cameraData	Lens	Lens
 	Plug-in folders	Eklenti klasörleri
 
 	Subfolders are included.	Alt klasörler de dahil edilir.
+# DDS Options (#1327)
+	DDS Options	DDS Seçenekleri
+	Generate Mipmaps	Mipmap oluştur

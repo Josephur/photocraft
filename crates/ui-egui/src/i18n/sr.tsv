@@ -4322,3 +4322,6 @@ shape	Appearance	Izgled
 	Plug-in folders	Фасцикле додатака
 
 	Subfolders are included.	Укључене су и потфасцикле.
+# DDS Options (#1327)
+	DDS Options	DDS opcije
+	Generate Mipmaps	Generiši mipmape

@@ -3736,3 +3736,7 @@ curves	Smooth	Làm mượt
 	Plug-in folders	Thư mục trình bổ sung
 
 	Subfolders are included.	Bao gồm các thư mục con.
+# DDS Options (#1327)
+	DDS Options	Tùy chọn DDS
+	Compression	Nén
+	Generate Mipmaps	Tạo mipmap

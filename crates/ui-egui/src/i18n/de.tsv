@@ -3250,3 +3250,7 @@ curves	Smooth	Glätten
 	Plug-in folders	Plug-in-Ordner
 
 	Subfolders are included.	Unterordner werden einbezogen.
+# DDS Options (#1327)
+	DDS Options	DDS-Optionen
+	Compression	Komprimierung
+	Generate Mipmaps	Mipmaps erzeugen

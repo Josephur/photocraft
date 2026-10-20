@@ -4366,3 +4366,6 @@ shape	Appearance	Aspetto
 	Plug-in folders	Cartelle dei plug-in
 
 	Subfolders are included.	Le sottocartelle sono incluse.
+# DDS Options (#1327)
+	DDS Options	Opzioni DDS
+	Generate Mipmaps	Genera mipmap

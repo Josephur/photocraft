@@ -2873,3 +2873,7 @@ curves	Smooth	平滑
 	Plug-in folders	插件文件夹
 
 	Subfolders are included.	包含子文件夹。
+# DDS Options (#1327)
+	DDS Options	DDS 选项
+	Compression	压缩
+	Generate Mipmaps	生成 Mipmap

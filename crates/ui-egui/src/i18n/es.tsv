@@ -4211,3 +4211,6 @@ navigator	Zoom	Zoom
 	Plug-in folders	Carpetas de complementos
 
 	Subfolders are included.	Se incluyen las subcarpetas.
+# DDS Options (#1327)
+	DDS Options	Opciones de DDS
+	Generate Mipmaps	Generar mipmaps

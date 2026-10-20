@@ -2858,3 +2858,7 @@ curves	Smooth	平滑
 	Plug-in folders	增效模組資料夾
 
 	Subfolders are included.	包含子資料夾。
+# DDS Options (#1327)
+	DDS Options	DDS 選項
+	Compression	壓縮
+	Generate Mipmaps	產生 Mipmap

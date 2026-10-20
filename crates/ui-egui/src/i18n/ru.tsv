@@ -3223,3 +3223,7 @@ curves	Smooth	Сгладить
 	Plug-in folders	Папки плагинов
 
 	Subfolders are included.	Вложенные папки тоже включены.
+# DDS Options (#1327)
+	DDS Options	Параметры DDS
+	Compression	Сжатие
+	Generate Mipmaps	Создать MIP-карты

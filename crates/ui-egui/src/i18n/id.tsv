@@ -3244,3 +3244,7 @@ curves	Smooth	Haluskan
 	Plug-in folders	Folder plugin
 
 	Subfolders are included.	Subfolder disertakan.
+# DDS Options (#1327)
+	DDS Options	Opsi DDS
+	Compression	Kompresi
+	Generate Mipmaps	Buat mipmap

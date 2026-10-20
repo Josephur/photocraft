@@ -3857,3 +3857,6 @@ navigator	Zoom	Zvětšení
 	Plug-in folders	Složky zásuvných modulů
 
 	Subfolders are included.	Podsložky jsou zahrnuty.
+# DDS Options (#1327)
+	DDS Options	Možnosti DDS
+	Generate Mipmaps	Generovat mipmapy

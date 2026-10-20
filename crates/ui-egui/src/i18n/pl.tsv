@@ -3848,3 +3848,7 @@ curves	Smooth	Wygładź
 	Plug-in folders	Foldery wtyczek
 
 	Subfolders are included.	Podfoldery są uwzględniane.
+# DDS Options (#1327)
+	DDS Options	Opcje DDS
+	Compression	Kompresja
+	Generate Mipmaps	Generuj mipmapy

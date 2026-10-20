@@ -4168,3 +4168,6 @@ cameraRaw	Yellow	Sárga
 	Plug-in folders	Bővítménymappák
 
 	Subfolders are included.	Az almappák is szerepelnek.
+# DDS Options (#1327)
+	DDS Options	DDS-beállítások
+	Generate Mipmaps	Mipmapek létrehozása
