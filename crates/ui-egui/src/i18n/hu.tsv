@@ -4164,3 +4164,7 @@ cameraRaw	Yellow	Sárga
 	In Front	Elöl
 	Behind	Mögött
 	Drag to set the direction	Húzással beállíthatod az irányt
+
+# DDS Options (#1327)
+	DDS Options	DDS-beállítások
+	Generate Mipmaps	Mipmapek létrehozása

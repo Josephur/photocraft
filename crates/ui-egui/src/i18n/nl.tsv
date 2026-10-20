@@ -4005,3 +4005,7 @@ curves	Smooth	Vloeiend maken
 	In Front	Voor
 	Behind	Achter
 	Drag to set the direction	Sleep om de richting in te stellen
+
+# DDS Options (#1327)
+	DDS Options	DDS-opties
+	Generate Mipmaps	Mipmaps genereren

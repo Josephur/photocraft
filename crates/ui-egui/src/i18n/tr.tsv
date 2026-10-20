@@ -3975,3 +3975,7 @@ cameraData	Lens	Lens
 	In Front	Önde
 	Behind	Arkada
 	Drag to set the direction	Yönü ayarlamak için sürükleyin
+
+# DDS Options (#1327)
+	DDS Options	DDS Seçenekleri
+	Generate Mipmaps	Mipmap oluştur

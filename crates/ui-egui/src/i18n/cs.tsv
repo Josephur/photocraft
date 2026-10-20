@@ -3853,3 +3853,7 @@ navigator	Zoom	Zvětšení
 	In Front	Vpředu
 	Behind	Vzadu
 	Drag to set the direction	Přetažením nastavte směr
+
+# DDS Options (#1327)
+	DDS Options	Možnosti DDS
+	Generate Mipmaps	Generovat mipmapy

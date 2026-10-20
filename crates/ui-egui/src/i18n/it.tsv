@@ -4362,3 +4362,7 @@ shape	Appearance	Aspetto
 	In Front	Davanti
 	Behind	Dietro
 	Drag to set the direction	Trascina per impostare la direzione
+
+# DDS Options (#1327)
+	DDS Options	Opzioni DDS
+	Generate Mipmaps	Genera mipmap
