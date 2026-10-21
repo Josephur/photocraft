@@ -6,7 +6,8 @@ The editor remains native Rust. Windows x64 and Linux x86_64 portable bundles ea
 32-bit and 64-bit Windows workers. Linux additionally needs an external Wine runtime with both
 architectures supported. See [compatibility and installation](../docs/native-8bf.md).
 
-No release is published by these commands. The first builds are local unsigned artifacts.
+Local build commands produce unsigned artifacts. The fork’s [nightly workflow](https://github.com/Josephur/photocraft/actions/workflows/fork-nightly.yml)
+publishes [prereleases](https://github.com/Josephur/photocraft/releases) only after both platforms build and runtime checks pass.
 The pinned FreeCandy WASM effect module is included with its 0BSD and third-party licenses in
 `plugins/`; add that folder in Preferences > Plug-ins to enable it. Third-party native plug-ins
 remain separate installations.
@@ -19,7 +20,7 @@ remain separate installations.
 | `feature/plugin-effect-suites-updated` | Original plug-in suite branch refreshed onto upstream | Yes, or split into smaller feature PRs |
 | `fork/nightly-tooling` | This directory and our fork's README headline | Never |
 | `nightly/source` | Reviewed source merge, including any conflict resolutions | Never |
-| `nightly/<build>` | Source plus fork tooling/README, built at an exact commit | Never |
+| `nightly` (fork default), `nightly/<build>` | Source plus fork tooling/README, built at an exact commit | Never |
 
 **Features flow into the nightly. Never merge a nightly or tooling branch back into a feature
 branch.** GitHub PRs compare the selected head with upstream; other branches in the same fork
@@ -101,8 +102,29 @@ The guard rejects nightly paths, the known headline, and tooling ancestry while 
 worker build/packaging scripts needed by 8BF. Inspect the whole diff as well: an automatic guard
 cannot decide whether every other feature change belongs in a particular PR.
 
-To make the headline appear at the fork's GitHub root later, publish a tested `nightly/<build>`
-branch to **Josephur/photocraft** and select that branch as the fork's default. That changes only
-which branch GitHub displays. Keep upstream PR heads on the named feature branches. Never push
-the integration branch over upstream `main` or use it as an upstream PR head. Publication,
-default-branch changes, signing and scheduling are separate explicit steps.
+## Published nightly CI
+
+The fork default branch is `nightly`, which contains the reviewed source and fork-only tooling.
+The headline and download links therefore appear on the repository page. Feature PRs still use
+the independent feature branches above. Advance `nightly` by merging updated source/tooling;
+never reset it over upstream `main`, force-push it, or use it as an upstream PR head.
+
+`.github/workflows/fork-nightly.yml` runs on pushes to `nightly`, manual dispatch, and daily at
+**4:17 a.m. America/Indiana/Indianapolis** (GitHub may delay scheduled starts). It builds Linux
+and Windows using Ubuntu 24.04, Rust 1.98.1, locked dependencies and pinned Actions revisions.
+Each job has read-only repository permissions; only the final publication job can write releases.
+The workflow is restricted to Josephur/photocraft and the `nightly` branch.
+
+Both archives must pass payload hashes, embedded revision, PE architecture/import checks and
+FreeCandy render tests. Linux runs a packaged editor smoke test under Xvfb/software Vulkan.
+A native Windows runner tests the **shipped GNU binaries**, both worker architectures against
+original clean-room fixtures, native filtering and undo, editor launch and the plug-in menus.
+Only then does CI publish a uniquely tagged prerelease with both archives and SHA-256 sidecars.
+Actions retain the runtime screenshots/reports and original QA fixtures for 14 days; synthetic
+fixtures are not included in product release archives. Releases retain their immutable versioned
+assets. Scheduled builds use the checked-in source pins; they do not silently merge new upstream
+or feature commits. Refresh those pins through the reviewed process above.
+
+The fork’s inherited FreeBSD, Perf (nightly), and Windows ARM64 scheduled workflows are disabled
+in repository Actions settings to avoid unrelated scheduled jobs on the new default branch.
+Normal feature CI and upstream workflow files remain unchanged.

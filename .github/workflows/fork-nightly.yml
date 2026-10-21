@@ -1,0 +1,196 @@
+name: PhotoCraft Photoshop Plug-in Nightly
+run-name: Photoshop plug-in nightly · ${{ github.sha }}
+
+on:
+  push:
+    branches: [nightly]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * *'
+      timezone: America/Indiana/Indianapolis
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-photoshop-nightly
+  cancel-in-progress: true
+
+env:
+  CARGO_BUILD_JOBS: '4'
+  RUST_TEST_THREADS: '4'
+  RAYON_NUM_THREADS: '4'
+  PHOTOCRAFT_NO_PRINT: '1'
+  LPDEST: photocraft-no-such-printer
+  RUSTUP_TOOLCHAIN: 1.98.1
+
+jobs:
+  build:
+    if: github.repository == 'Josephur/photocraft' && github.ref == 'refs/heads/nightly'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        platform: [linux, windows]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check source ownership and tooling
+        run: |
+          git branch fork/nightly-tooling origin/fork/nightly-tooling
+          python3 -m unittest discover -s nightly -v
+          python3 nightly/nightly.py verify
+      - name: Install native and cross-build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libgtk-3-dev pkg-config gcc-mingw-w64-i686-posix \
+            gcc-mingw-w64-x86-64-posix binutils-mingw-w64 python3-venv xvfb \
+            xauth mesa-vulkan-drivers
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup target add --toolchain 1.98.1 x86_64-unknown-linux-gnu x86_64-pc-windows-gnu i686-pc-windows-gnu
+          python3 -m venv "$RUNNER_TEMP/qa-python"
+          "$RUNNER_TEMP/qa-python/bin/pip" install Pillow==12.0.0 tzdata==2025.2
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/agent-nightly
+          key: fork-nightly-ubuntu24-${{ matrix.platform }}-rust1.98.1-${{ github.sha }}
+          restore-keys: fork-nightly-ubuntu24-${{ matrix.platform }}-rust1.98.1-
+      - name: Build exact release payload
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: python3 nightly/nightly.py build "$PLATFORM"
+      - name: Verify payload and Linux runtime
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          REVISION: ${{ github.sha }}
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WGPU_BACKEND: vulkan
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          bundle=$(find target/nightly -mindepth 1 -maxdepth 1 -type d -name '*-x86_64' -print -quit)
+          python3 nightly/ci.py verify "$bundle" --revision "$REVISION"
+          if [ "$PLATFORM" = linux ]; then
+            xvfb-run -a "$RUNNER_TEMP/qa-python/bin/python" nightly/ci.py smoke "$bundle" \
+              --revision "$REVISION" --output target/qa-linux
+          else
+            python3 nightly/ci.py fixtures target/qa-fixtures
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nightly-${{ matrix.platform }}
+          path: |
+            target/nightly/*.tar.gz
+            target/nightly/*.zip
+            target/nightly/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: matrix.platform == 'windows'
+        with:
+          name: original-8bf-fixtures
+          path: target/qa-fixtures
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && matrix.platform == 'linux'
+        with:
+          name: runtime-linux
+          path: target/qa-linux
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-runtime:
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: nightly-windows
+          path: target/download
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: original-8bf-fixtures
+          path: target/qa-fixtures
+      - name: Validate shipped Windows binaries and both native workers
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          python -m pip install Pillow==12.0.0 tzdata==2025.2
+          $archive = Get-ChildItem target/download/*.zip | Select-Object -First 1
+          $expected = ((Get-Content ($archive.FullName + '.sha256')) -split '\s+')[0]
+          if ((Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Archive checksum mismatch' }
+          Expand-Archive $archive.FullName target/unpacked
+          $bundle = (Get-ChildItem target/unpacked -Directory | Select-Object -First 1).FullName
+          python nightly/ci.py smoke $bundle --revision $env:REVISION --output target/qa-windows --fixtures target/qa-fixtures
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python compat/8bf-worker/tools/validate-workers.py --runner native --workers-dir $bundle --fixtures-dir target/qa-fixtures --large
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: runtime-windows
+          path: |
+            target/qa-windows
+            compat/8bf-worker/target/conformance.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [build, windows-runtime]
+    if: github.repository == 'Josephur/photocraft' && github.ref == 'refs/heads/nightly'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: nightly-*
+          merge-multiple: true
+          path: release-assets
+      - name: Publish immutable nightly prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          cd release-assets
+          sha256sum --check ./*.sha256
+          test "$(find . -maxdepth 1 -name '*.zip' | wc -l)" -eq 1
+          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 1
+          stamp=$(TZ=America/Indiana/Indianapolis date +%Y%m%d-%H%M)
+          tag="nightly-${stamp}-${RUN_ID}-${RUN_ATTEMPT}"
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Your Photoshop plug-ins. Now in PhotoCraft.
+
+          Experimental Photoshop-compatible x86/x64 .8bf filters plus the bundled FreeCandy7 WASM effect suite. Both archives contain the editor, CLI, both worker architectures, source/build receipts, checksums and licenses.
+
+          Integration: $REVISION
+          CI and native Windows/Linux runtime checks: $RUN_URL
+
+          These builds are unsigned. Linux requires external Wine supporting both worker architectures for native filters and uses Ubuntu 24.04 system libraries. Compatibility is limited to the documented RGB/Gray 8-/16-bit raster filter bridge; arbitrary vendor plug-ins, UXP and .8bi importers are not certified.
+
+          Add the bundle's plugins folder in Preferences > Plug-ins to enable FreeCandy. Keep both worker executables alongside the editor. See the included README and 8BF-COMPATIBILITY.md.
+          EOF
+          gh release create "$tag" ./*.zip ./*.tar.gz ./*.sha256 --target "$REVISION" \
+            --prerelease --title "PhotoCraft Photoshop Plug-in Nightly · $stamp Indianapolis" \
+            --notes-file "$RUNNER_TEMP/notes.md"
