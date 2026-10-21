@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import struct
 import subprocess
@@ -21,6 +22,16 @@ from zoneinfo import ZoneInfo
 ZONE = ZoneInfo("America/Indiana/Indianapolis")
 FORK_PATHS = ("nightly/", ".github/workflows/fork-nightly.yml")
 TARGETS = {"linux": "x86_64-unknown-linux-gnu", "windows": "x86_64-pc-windows-gnu"}
+WINDOWS_SYSTEM_DLLS = set("""
+advapi32.dll avrt.dll bcrypt.dll cfgmgr32.dll comctl32.dll comdlg32.dll crypt32.dll
+d2d1.dll d3d11.dll d3d12.dll d3dcompiler_47.dll dcomp.dll dnsapi.dll dwmapi.dll
+dwrite.dll dxgi.dll gdi32.dll hid.dll imm32.dll iphlpapi.dll kernel32.dll kernelbase.dll
+msimg32.dll msvcrt.dll ncrypt.dll netapi32.dll normaliz.dll ntdll.dll ole32.dll
+oleacc.dll oleaut32.dll opengl32.dll powrprof.dll propsys.dll psapi.dll rpcrt4.dll
+secur32.dll setupapi.dll shell32.dll shlwapi.dll ucrtbase.dll user32.dll userenv.dll
+usp10.dll uxtheme.dll version.dll windows.data.pdf.dll windowscodecs.dll winhttp.dll
+wininet.dll winmm.dll winspool.drv wintrust.dll ws2_32.dll wtsapi32.dll
+""".split())
 
 
 def command(args, cwd, env=None, capture=False):
@@ -111,6 +122,18 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest() if hasattr(hashlib, "file_digest") else hashlib.sha256(stream.read()).hexdigest()
 
 
+def pe_imports(path):
+    output = command(["x86_64-w64-mingw32-objdump", "-p", path], path.parent, capture=True)
+    imports = sorted(set(re.findall(r"DLL Name:\s*(\S+)", output)))
+    if not imports:
+        raise ValueError(f"could not inspect executable imports: {path}")
+    unknown = [name for name in imports if name.lower() not in WINDOWS_SYSTEM_DLLS
+               and not name.lower().startswith(("api-ms-win-", "ext-ms-win-"))]
+    if unknown:
+        raise ValueError(f"unbundled non-system Windows dependencies in {path.name}: {', '.join(unknown)}; statically link or explicitly package and license them")
+    return imports
+
+
 def plugin_payload(manifest, repository):
     """Read committed, hash-pinned distributables without touching a developer's checkout."""
     plugin = manifest["freecandy"]
@@ -174,18 +197,22 @@ def build(root, manifest, platform, output, target_dir, freecandy_repo=None):
     run(["cargo", "build", "--locked", "--release", "--target", target,
          "-p", "photocraft", "-p", "photocraft-cli", "--features", "photocraft/heif,photocraft-cli/heif"])
     workers = []
+    imports = {}
     for architecture, bits in (("i686", 32), ("x86_64", 64)):
         worker_target = f"{architecture}-pc-windows-gnu"
         run(["cargo", "build", "--locked", "--release", "--manifest-path", "compat/8bf-worker/Cargo.toml",
              "--target-dir", target_dir / "8bf-workers", "--target", worker_target])
         worker = target_dir / "8bf-workers" / worker_target / "release/photocraft-8bf-worker.exe"
         verify_pe(worker, 0x14C if bits == 32 else 0x8664)
+        imports[f"photocraft-8bf-worker{bits}.exe"] = pe_imports(worker)
         workers.append((worker, f"photocraft-8bf-worker{bits}.exe"))
     binary_dir = target_dir / target / "release"
     suffix = ".exe" if platform == "windows" else ""
     if platform == "windows":
         verify_pe(binary_dir / "photocraft.exe", 0x8664, gui=True)
         verify_pe(binary_dir / "photocraft-cli.exe", 0x8664)
+        for binary in ("photocraft.exe", "photocraft-cli.exe"):
+            imports[binary] = pe_imports(binary_dir / binary)
     bundle.mkdir()
     for binary in ("photocraft", "photocraft-cli"):
         shutil.copy2(binary_dir / (binary + suffix), bundle / (binary + suffix))
@@ -204,7 +231,7 @@ def build(root, manifest, platform, output, target_dir, freecandy_repo=None):
         "Your Photoshop plug-ins. Now in PhotoCraft.\n"
         "Experimental Windows x86/x64 .8bf filters on RGB/Gray 8-/16-bit raster layers.\n"
         "Keep both worker executables next to the editor. Linux requires external Wine\n"
-        "with support for both architectures. No third-party plug-ins or Wine are bundled.\n"
+        "with support for both architectures. No proprietary 8BF plug-ins or Wine are bundled.\n"
         "Use Preferences > Plug-ins to add folders, or Filter > Plug-ins > Install 8BF Plug-in.\n"
         "FreeCandy is included in plugins/freecandy7.wasm. Add this bundle's plugins folder in\n"
         "Preferences > Plug-ins, or choose Filter > Plug-ins > Install Plug-in to load it.\n"
@@ -215,7 +242,8 @@ def build(root, manifest, platform, output, target_dir, freecandy_repo=None):
                    timezone="America/Indiana/Indianapolis", integration=head, manifest=manifest, target=target,
                    rustc=command(["rustc", "--version", "--verbose"], root, capture=True), profile="release",
                    commands=commands, cpus=cpus, fonts=fonts,
-                   checks=["pinned source ancestry", "clean source worktree", "worker x86/x64 PE architecture"] +
+                   windows_imports=imports,
+                   checks=["pinned source ancestry", "clean source worktree", "worker x86/x64 PE architecture", "Windows imports: system DLLs only"] +
                           (["Windows editor GUI subsystem"] if platform == "windows" else []),
                    runtime_validation="See validation report; build success alone does not certify vendor plug-ins.",
                    files={p.relative_to(bundle).as_posix(): digest(p) for p in sorted(bundle.rglob("*")) if p.is_file()})
