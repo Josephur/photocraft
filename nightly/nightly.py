@@ -23,7 +23,7 @@ ZONE = ZoneInfo("America/Indiana/Indianapolis")
 FORK_PATHS = ("nightly/", ".github/workflows/fork-nightly.yml")
 TARGETS = {"linux": "x86_64-unknown-linux-gnu", "windows": "x86_64-pc-windows-gnu"}
 WINDOWS_SYSTEM_DLLS = set("""
-advapi32.dll avrt.dll bcrypt.dll cfgmgr32.dll comctl32.dll comdlg32.dll crypt32.dll
+advapi32.dll avrt.dll bcrypt.dll bcryptprimitives.dll cfgmgr32.dll comctl32.dll comdlg32.dll crypt32.dll
 d2d1.dll d3d11.dll d3d12.dll d3dcompiler_47.dll dcomp.dll dnsapi.dll dwmapi.dll
 dwrite.dll dxgi.dll gdi32.dll hid.dll imm32.dll iphlpapi.dll kernel32.dll kernelbase.dll
 msimg32.dll msvcrt.dll ncrypt.dll netapi32.dll normaliz.dll ntdll.dll ole32.dll
