@@ -110,7 +110,7 @@ class NightlyTests(unittest.TestCase):
 
     def test_pe_import_audit_rejects_missing_compiler_runtime_and_empty_output(self):
         path = self.root / "worker.exe"
-        with patch.object(nightly, "command", return_value="DLL Name: KERNEL32.dll\nDLL Name: api-ms-win-crt-runtime-l1-1-0.dll\n"):
+        with patch.object(nightly, "command", return_value="DLL Name: bcryptprimitives.dll\nDLL Name: api-ms-win-crt-runtime-l1-1-0.dll\n"):
             self.assertEqual(len(nightly.pe_imports(path)), 2)
         with patch.object(nightly, "command", return_value="DLL Name: KERNEL32.dll\nDLL Name: libwinpthread-1.dll\n"):
             with self.assertRaisesRegex(ValueError, "libwinpthread-1.dll"):
