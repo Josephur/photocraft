@@ -23,12 +23,12 @@ ZONE = ZoneInfo("America/Indiana/Indianapolis")
 FORK_PATHS = ("nightly/", ".github/workflows/fork-nightly.yml")
 TARGETS = {"linux": "x86_64-unknown-linux-gnu", "windows": "x86_64-pc-windows-gnu"}
 WINDOWS_SYSTEM_DLLS = set("""
-advapi32.dll avrt.dll bcrypt.dll bcryptprimitives.dll cfgmgr32.dll comctl32.dll comdlg32.dll crypt32.dll
+advapi32.dll avrt.dll bcrypt.dll bcryptprimitives.dll cfgmgr32.dll combase.dll comctl32.dll comdlg32.dll crypt32.dll
 d2d1.dll d3d11.dll d3d12.dll d3dcompiler_47.dll dcomp.dll dnsapi.dll dwmapi.dll
 dwrite.dll dxgi.dll gdi32.dll hid.dll imm32.dll iphlpapi.dll kernel32.dll kernelbase.dll
 msimg32.dll msvcrt.dll ncrypt.dll netapi32.dll normaliz.dll ntdll.dll ole32.dll
-oleacc.dll oleaut32.dll opengl32.dll powrprof.dll propsys.dll psapi.dll rpcrt4.dll
-secur32.dll setupapi.dll shell32.dll shlwapi.dll ucrtbase.dll user32.dll userenv.dll
+oleacc.dll oleaut32.dll opengl32.dll powrprof.dll prntvpt.dll propsys.dll psapi.dll rpcrt4.dll
+secur32.dll setupapi.dll shell32.dll shlwapi.dll ucrtbase.dll uiautomationcore.dll user32.dll userenv.dll
 usp10.dll uxtheme.dll version.dll windows.data.pdf.dll windowscodecs.dll winhttp.dll
 wininet.dll winmm.dll winspool.drv wintrust.dll ws2_32.dll wtsapi32.dll
 """.split())
