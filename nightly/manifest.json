@@ -15,11 +15,50 @@
     }
   ],
   "excluded_branches": [
-    {"branch": "main", "reason": "Old upstream checkout; pinned upstream is authoritative."},
-    {"branch": "backup/8bf-pre-rebase-20261020", "reason": "Historical backup; current 8BF branch supersedes it."},
-    {"branch": "feature/plugin-effect-suites", "reason": "Original preserved worktree; updated branch contains it."},
-    {"branch": "feature/plugin-parameter-controls", "reason": "Already merged into effect suites."},
-    {"branch": "candy-a-base", "reason": "Historical partial source; corresponding patches included by effect suites."},
-    {"branch": "candy-full", "reason": "Historical partial source; corresponding patches included by effect suites."}
-  ]
+    {
+      "branch": "main",
+      "reason": "Old upstream checkout; pinned upstream is authoritative."
+    },
+    {
+      "branch": "backup/8bf-pre-rebase-20261020",
+      "reason": "Historical backup; current 8BF branch supersedes it."
+    },
+    {
+      "branch": "feature/plugin-effect-suites",
+      "reason": "Original preserved worktree; updated branch contains it."
+    },
+    {
+      "branch": "feature/plugin-parameter-controls",
+      "reason": "Already merged into effect suites."
+    },
+    {
+      "branch": "candy-a-base",
+      "reason": "Historical partial source; corresponding patches included by effect suites."
+    },
+    {
+      "branch": "candy-full",
+      "reason": "Historical partial source; corresponding patches included by effect suites."
+    }
+  ],
+  "freecandy": {
+    "repository": "https://github.com/Josephur/FreeCandy7.git",
+    "commit": "39b2280a6d65bf8f8f4d39ff3f9a1b0dcc698f99",
+    "files": [
+      {
+        "source": "plugins/freecandy7/dist/freecandy7.wasm",
+        "destination": "plugins/freecandy7.wasm",
+        "sha256": "9e70bebd633d4206df2180488b80ac57c3c6b5768a300d8432f576f660095b98"
+      },
+      {
+        "source": "LICENSE",
+        "destination": "plugins/FreeCandy7-LICENSE",
+        "sha256": "5b13b76df443e040a044f75495e28830ad0de2f46f81cb0928911012bdc8c2cd"
+      },
+      {
+        "source": "plugins/freecandy7/LICENSE-THIRD-PARTY",
+        "destination": "plugins/FreeCandy7-LICENSE-THIRD-PARTY",
+        "sha256": "6e7a5f076add506ea06f0b8e6169c4b6fd966fbb8cbbe55367be6698938bf2d9"
+      }
+    ]
+  }
 }

@@ -7,8 +7,9 @@ The editor remains native Rust. Windows x64 and Linux x86_64 portable bundles ea
 architectures supported. See [compatibility and installation](../docs/native-8bf.md).
 
 No release is published by these commands. The first builds are local unsigned artifacts.
-The FreeCandy host features are included; third-party/native plug-ins and a FreeCandy effect
-WASM module are separate installations unless explicitly listed in a build receipt.
+The pinned FreeCandy WASM effect module is included with its 0BSD and third-party licenses in
+`plugins/`; add that folder in Preferences > Plug-ins to enable it. Third-party native plug-ins
+remain separate installations.
 
 ## Branch ownership
 
@@ -58,6 +59,10 @@ build commands sequentially. It refuses dirty source and existing worktree/outpu
 
 Use `--target-dir /absolute/build-cache` to share the same task-owned cache between the two
 commands. `--output /absolute/artifacts` selects the artifact directory. Optional
+`--freecandy-repo /absolute/FreeCandy7` reads the committed artifact directly from an existing
+checkout, without changing that checkout or reading its uncommitted content. Otherwise the
+builder fetches the manifest's public FreeCandy repository at its pinned commit into the build
+cache. The WASM and both license files must match their manifest SHA-256 hashes. Optional
 `CRAFT_FONTS_DIR=/absolute/clean/craft-fonts` is recorded by revision; without it the app uses its
 normal fonts/system-font behavior. No font files are committed here.
 

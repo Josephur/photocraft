@@ -1,6 +1,7 @@
 """Exercise Git separation and packaged executable checks with disposable fixtures."""
 import importlib.util
 import json
+import hashlib
 from pathlib import Path
 import struct
 import subprocess
@@ -96,6 +97,15 @@ class NightlyTests(unittest.TestCase):
         path.write_bytes(b"broken")
         with self.assertRaises(ValueError):
             nightly.verify_pe(path, 0x8664)
+
+    def test_plugin_payload_reads_pinned_commit_and_checks_hashes(self):
+        manifest = {"freecandy": {"commit": self.base, "files": [
+            {"source": "README.md", "destination": "plugins/LICENSE", "sha256": hashlib.sha256(b"Upstream\n").hexdigest()}
+        ]}}
+        self.assertEqual(nightly.plugin_payload(manifest, self.root), [(Path("plugins/LICENSE"), b"Upstream\n")])
+        manifest["freecandy"]["files"][0]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            nightly.plugin_payload(manifest, self.root)
 
 
 if __name__ == "__main__":

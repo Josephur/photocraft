@@ -111,7 +111,25 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest() if hasattr(hashlib, "file_digest") else hashlib.sha256(stream.read()).hexdigest()
 
 
-def build(root, manifest, platform, output, target_dir):
+def plugin_payload(manifest, repository):
+    """Read committed, hash-pinned distributables without touching a developer's checkout."""
+    plugin = manifest["freecandy"]
+    commit = resolve(repository, plugin["commit"])
+    if commit != plugin["commit"] or len(commit) != 40:
+        raise ValueError("FreeCandy revision must be an immutable full commit SHA")
+    payload = []
+    for item in plugin["files"]:
+        destination = Path(item["destination"])
+        if destination.is_absolute() or ".." in destination.parts:
+            raise ValueError("FreeCandy payload destination must stay inside the bundle")
+        data = subprocess.check_output(["git", "show", f"{commit}:{item['source']}"], cwd=repository)
+        if hashlib.sha256(data).hexdigest() != item["sha256"]:
+            raise ValueError(f"FreeCandy payload checksum mismatch: {item['source']}")
+        payload.append((destination, data))
+    return payload
+
+
+def build(root, manifest, platform, output, target_dir, freecandy_repo=None):
     clean(root)
     validate_manifest(root, manifest)
     head = resolve(root, "HEAD")
@@ -124,6 +142,13 @@ def build(root, manifest, platform, output, target_dir):
     os.sched_setaffinity(0, cpus)
     os.nice(10)
     target_dir = target_dir.resolve()
+    if freecandy_repo is None:
+        freecandy_repo = target_dir / "nightly-inputs/freecandy7"
+        if not freecandy_repo.exists():
+            freecandy_repo.mkdir(parents=True)
+            command(["git", "init"], freecandy_repo)
+        command(["git", "fetch", "--depth=1", manifest["freecandy"]["repository"], manifest["freecandy"]["commit"]], freecandy_repo)
+    payload = plugin_payload(manifest, freecandy_repo.resolve())
     env = dict(os.environ, CARGO_BUILD_JOBS="8", RUST_TEST_THREADS="8", RAYON_NUM_THREADS="8",
                CARGO_TARGET_DIR=str(target_dir), PHOTOCRAFT_REQUIRE_WINRES="1")
     # Optional fonts are recorded, never copied into source or silently assumed present.
@@ -166,6 +191,10 @@ def build(root, manifest, platform, output, target_dir):
         shutil.copy2(binary_dir / (binary + suffix), bundle / (binary + suffix))
     for worker, name in workers:
         shutil.copy2(worker, bundle / name)
+    for relative, data in payload:
+        path = bundle / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
     for name in ("LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "ATTRIBUTION.md"):
         shutil.copy2(root / name, bundle / name)
     shutil.copy2(root / "docs/native-8bf.md", bundle / "8BF-COMPATIBILITY.md")
@@ -177,6 +206,8 @@ def build(root, manifest, platform, output, target_dir):
         "Keep both worker executables next to the editor. Linux requires external Wine\n"
         "with support for both architectures. No third-party plug-ins or Wine are bundled.\n"
         "Use Preferences > Plug-ins to add folders, or Filter > Plug-ins > Install 8BF Plug-in.\n"
+        "FreeCandy is included in plugins/freecandy7.wasm. Add this bundle's plugins folder in\n"
+        "Preferences > Plug-ins, or choose Filter > Plug-ins > Install Plug-in to load it.\n"
         "See 8BF-COMPATIBILITY.md for limits. UXP, .8bi and universal compatibility are not provided.\n"
         "This is an unsigned experimental fork build. See BUILD-RECEIPT.json for exact sources.\n",
         encoding="utf-8")
@@ -187,14 +218,15 @@ def build(root, manifest, platform, output, target_dir):
                    checks=["pinned source ancestry", "clean source worktree", "worker x86/x64 PE architecture"] +
                           (["Windows editor GUI subsystem"] if platform == "windows" else []),
                    runtime_validation="See validation report; build success alone does not certify vendor plug-ins.",
-                   files={p.name: digest(p) for p in sorted(bundle.iterdir()) if p.is_file()})
+                   files={p.relative_to(bundle).as_posix(): digest(p) for p in sorted(bundle.rglob("*")) if p.is_file()})
     (bundle / "BUILD-RECEIPT.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    (bundle / "SHA256SUMS").write_text("".join(f"{digest(p)}  {p.name}\n" for p in sorted(bundle.iterdir()) if p.is_file()))
+    (bundle / "SHA256SUMS").write_text("".join(f"{digest(p)}  {p.relative_to(bundle).as_posix()}\n" for p in sorted(bundle.rglob("*")) if p.is_file()))
     if platform == "windows":
         archive = output / (bundle.name + ".zip")
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as stream:
-            for path in sorted(bundle.iterdir()):
-                stream.write(path, f"{bundle.name}/{path.name}")
+            for path in sorted(bundle.rglob("*")):
+                if path.is_file():
+                    stream.write(path, f"{bundle.name}/{path.relative_to(bundle).as_posix()}")
     else:
         archive = output / (bundle.name + ".tar.gz")
         with tarfile.open(archive, "w:gz") as stream:
@@ -214,6 +246,7 @@ def main():
     build_parser.add_argument("platform", choices=TARGETS)
     build_parser.add_argument("--output", type=Path, default=Path("target/nightly"))
     build_parser.add_argument("--target-dir", type=Path, default=Path("target/agent-nightly"))
+    build_parser.add_argument("--freecandy-repo", type=Path, help="read the pinned artifact from an existing repository instead of fetching")
     guard_parser = commands.add_parser("check-pr", help="reject fork-only paths/branding in a feature diff")
     guard_parser.add_argument("feature")
     guard_parser.add_argument("--base", default="origin/main")
@@ -224,7 +257,7 @@ def main():
     if args.command == "assemble":
         assemble(root, manifest, args.destination, args.branch)
     elif args.command == "build":
-        build(root, manifest, args.platform, args.output, args.target_dir)
+        build(root, manifest, args.platform, args.output, args.target_dir, args.freecandy_repo)
     elif args.command == "check-pr":
         check_pr(root, args.base, args.feature, args.tooling)
     else:
