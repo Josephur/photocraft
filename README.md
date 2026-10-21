@@ -9,6 +9,23 @@
 
 <h1 align="center">PhotoCraft</h1>
 
+<h2 align="center">Your Photoshop plug-ins. Now in PhotoCraft.</h2>
+
+<p align="center">
+  <b>PhotoCraft Nightly — Photoshop Plug-in Support</b><br>
+  Experimental Photoshop-compatible <code>.8bf</code> filters, including 32-bit and 64-bit plug-ins,<br>
+  in a native, open-source image editor for Windows and Linux.<br>
+  <a href="nightly/README.md"><b>Build the plug-in-enabled nightly</b></a> ·
+  <a href="docs/native-8bf.md">Install plug-ins and check compatibility</a>
+</p>
+
+> This fork combines desktop 8BF support with the FreeCandy host's effect suites, controls,
+> presets and previews. Linux runs the Windows filter workers through external Wine.
+> Compatibility is experimental: RGB/Grayscale 8-/16-bit raster filters; individual plug-ins
+> may require unsupported host services. UXP and `.8bi` importers are not supported.
+> Nightly artifacts are currently built locally; the upstream downloads below are separate.
+
+
 <p align="center">
   <b>Image editing; an open-source, clean-room reimplementation of Adobe Photoshop, rebuilt in pure Rust.</b><br>
   Layers, masks, adjustment layers, layer styles, type, vectors, brushes and real PSD files,<br>
