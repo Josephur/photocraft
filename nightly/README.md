@@ -20,7 +20,7 @@ remain separate installations.
 | `feature/plugin-effect-suites-updated` | Original plug-in suite branch refreshed onto upstream | Yes, or split into smaller feature PRs |
 | `fork/nightly-tooling` | This directory and our fork's README headline | Never |
 | `nightly/source` | Reviewed source merge, including any conflict resolutions | Never |
-| `nightly` (fork default), `nightly/<build>` | Source plus fork tooling/README, built at an exact commit | Never |
+| `nightly/latest` (fork default), `nightly/<build>` | Source plus fork tooling/README, built at an exact commit | Never |
 
 **Features flow into the nightly. Never merge a nightly or tooling branch back into a feature
 branch.** GitHub PRs compare the selected head with upstream; other branches in the same fork
@@ -104,16 +104,16 @@ cannot decide whether every other feature change belongs in a particular PR.
 
 ## Published nightly CI
 
-The fork default branch is `nightly`, which contains the reviewed source and fork-only tooling.
+The fork default branch is `nightly/latest`, which contains the reviewed source and fork-only tooling.
 The headline and download links therefore appear on the repository page. Feature PRs still use
-the independent feature branches above. Advance `nightly` by merging updated source/tooling;
+the independent feature branches above. Advance `nightly/latest` by merging updated source/tooling;
 never reset it over upstream `main`, force-push it, or use it as an upstream PR head.
 
-`.github/workflows/fork-nightly.yml` runs on pushes to `nightly`, manual dispatch, and daily at
+`.github/workflows/fork-nightly.yml` runs on pushes to `nightly/latest`, manual dispatch, and daily at
 **4:17 a.m. America/Indiana/Indianapolis** (GitHub may delay scheduled starts). It builds Linux
 and Windows using Ubuntu 24.04, Rust 1.98.1, locked dependencies and pinned Actions revisions.
 Each job has read-only repository permissions; only the final publication job can write releases.
-The workflow is restricted to Josephur/photocraft and the `nightly` branch.
+The workflow is restricted to Josephur/photocraft and the `nightly/latest` branch.
 
 Both archives must pass payload hashes, embedded revision, PE architecture/import checks and
 FreeCandy render tests. Linux runs a packaged editor smoke test under Xvfb/software Vulkan.

@@ -3,7 +3,7 @@ run-name: Photoshop plug-in nightly · ${{ github.sha }}
 
 on:
   push:
-    branches: [nightly]
+    branches: [nightly/latest]
   workflow_dispatch:
   schedule:
     - cron: '17 4 * * *'
@@ -26,7 +26,7 @@ env:
 
 jobs:
   build:
-    if: github.repository == 'Josephur/photocraft' && github.ref == 'refs/heads/nightly'
+    if: github.repository == 'Josephur/photocraft' && github.ref == 'refs/heads/nightly/latest'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -153,7 +153,7 @@ jobs:
 
   publish:
     needs: [build, windows-runtime]
-    if: github.repository == 'Josephur/photocraft' && github.ref == 'refs/heads/nightly'
+    if: github.repository == 'Josephur/photocraft' && github.ref == 'refs/heads/nightly/latest'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
