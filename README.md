@@ -25,7 +25,7 @@
 > Compatibility is experimental: RGB/Grayscale 8-/16-bit raster filters; individual plug-ins
 > may require unsupported host services. UXP and `.8bi` importers are not supported.
 > Nightly builds and checks run daily at 4:17 a.m. Indianapolis time and on updates to this
-> fork’s `nightly` branch. Successful builds publish unsigned prereleases; the upstream downloads below are separate.
+> fork’s `nightly/latest` branch. Successful builds publish unsigned prereleases; the upstream downloads below are separate.
 
 
 <p align="center">
