@@ -224,6 +224,12 @@ def build(root, manifest, platform, output, target_dir, freecandy_repo=None):
         path.write_bytes(data)
     for name in ("LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "ATTRIBUTION.md"):
         shutil.copy2(root / name, bundle / name)
+    with (bundle / "ATTRIBUTION.md").open("a", encoding="utf-8") as attribution:
+        attribution.write(
+            "\n## Nightly plug-in payload\n\n"
+            "| Path | Title | Author | Source | License |\n| --- | --- | --- | --- | --- |\n"
+            f"| plugins/freecandy7.wasm | FreeCandy7 | FreeCandy7 contributors | {manifest['freecandy']['repository']} "
+            f"at {manifest['freecandy']['commit']} | 0BSD; see plugins/FreeCandy7-LICENSE and plugins/FreeCandy7-LICENSE-THIRD-PARTY |\n")
     shutil.copy2(root / "docs/native-8bf.md", bundle / "8BF-COMPATIBILITY.md")
     shutil.copy2(root / "nightly/manifest.json", bundle / "SOURCE-MANIFEST.json")
     (bundle / "README.txt").write_text(
