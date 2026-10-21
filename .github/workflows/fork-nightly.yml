@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev \
+            libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libx11-dev libxrandr-dev libxi-dev \
             libgl1-mesa-dev libgtk-3-dev pkg-config gcc-mingw-w64-i686-posix \
             gcc-mingw-w64-x86-64-posix binutils-mingw-w64 python3-venv xvfb \
             xauth mesa-vulkan-drivers
@@ -56,18 +56,29 @@ jobs:
           rustup target add --toolchain 1.98.1 x86_64-unknown-linux-gnu x86_64-pc-windows-gnu i686-pc-windows-gnu
           python3 -m venv "$RUNNER_TEMP/qa-python"
           "$RUNNER_TEMP/qa-python/bin/pip" install Pillow==12.0.0 tzdata==2025.2
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: build-cache
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target/agent-nightly
           key: fork-nightly-ubuntu24-${{ matrix.platform }}-rust1.98.1-${{ github.sha }}
-          restore-keys: fork-nightly-ubuntu24-${{ matrix.platform }}-rust1.98.1-
+          restore-keys: |
+            fork-nightly-ubuntu24-${{ matrix.platform }}-rust1.98.1-
+            fork-nightly-ubuntu24-
       - name: Build exact release payload
         env:
           PLATFORM: ${{ matrix.platform }}
         run: python3 nightly/nightly.py build "$PLATFORM"
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/agent-nightly
+          key: fork-nightly-ubuntu24-${{ matrix.platform }}-rust1.98.1-${{ github.sha }}
       - name: Verify payload and Linux runtime
         env:
           PLATFORM: ${{ matrix.platform }}
