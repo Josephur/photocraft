@@ -1747,6 +1747,7 @@
 	Integrations…	Ενσωματώσεις…
 	AI Integrations…	Ενσωματώσεις ΤΝ…
 	Install Plug-in…	Εγκατάσταση προσθέτου…
+	Install 8BF Plug-in…	Εγκατάσταση προσθέτου (8BF)…
 	Language Options	Επιλογές γλώσσας
 	Settings…	Ρυθμίσεις…
 	Bitmap	Ασπρόμαυρο bitmap
@@ -3972,6 +3973,9 @@ curves	Smooth	Εξομάλυνση
 	Behind	Πίσω
 	Drag to set the direction	Σύρετε για να ορίσετε την κατεύθυνση
 
+	Plug-in folders	Φάκελοι πρόσθετων
+
+	Subfolders are included.	Περιλαμβάνονται οι υποφάκελοι.
 # DDS Options (#1327)
 	DDS Options	Επιλογές DDS
 	Generate Mipmaps	Δημιουργία mipmap

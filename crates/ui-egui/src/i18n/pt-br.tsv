@@ -222,6 +222,7 @@
 	Integrations…	Integrações…
 	AI Integrations…	Integrações de IA…
 	Install Plug-in…	Instalar plug-in…
+	Install 8BF Plug-in…	Instalar plug-in (8BF)…
 	Language Options	Opções de idioma
 	Settings…	Configurações…
 	Mode	Modo
@@ -4062,6 +4063,9 @@ layerLabel	No Color	Sem cor
 	Behind	Atrás
 	Drag to set the direction	Arraste para definir a direção
 
+	Plug-in folders	Pastas de plug-ins
+
+	Subfolders are included.	As subpastas são incluídas.
 # DDS Options (#1327)
 	DDS Options	Opções de DDS
 	Generate Mipmaps	Gerar mipmaps

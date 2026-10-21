@@ -230,6 +230,7 @@
 	Integrations…	Integrace…
 	AI Integrations…	Integrace AI…
 	Install Plug-in…	Instalovat zásuvný modul…
+	Install 8BF Plug-in…	Instalovat zásuvný modul (8BF)…
 	Language Options	Jazykové možnosti
 	Settings…	Nastavení…
 	Mode	Režim
@@ -3882,6 +3883,9 @@ navigator	Zoom	Zvětšení
 	Behind	Vzadu
 	Drag to set the direction	Přetažením nastavte směr
 
+	Plug-in folders	Složky zásuvných modulů
+
+	Subfolders are included.	Podsložky jsou zahrnuty.
 # DDS Options (#1327)
 	DDS Options	Možnosti DDS
 	Generate Mipmaps	Generovat mipmapy
