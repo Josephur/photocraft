@@ -173,7 +173,8 @@ def build(root, manifest, platform, output, target_dir, freecandy_repo=None):
         command(["git", "fetch", "--depth=1", manifest["freecandy"]["repository"], manifest["freecandy"]["commit"]], freecandy_repo)
     payload = plugin_payload(manifest, freecandy_repo.resolve())
     env = dict(os.environ, CARGO_BUILD_JOBS="8", RUST_TEST_THREADS="8", RAYON_NUM_THREADS="8",
-               CARGO_TARGET_DIR=str(target_dir), PHOTOCRAFT_REQUIRE_WINRES="1")
+               CARGO_TARGET_DIR=str(target_dir), PHOTOCRAFT_REQUIRE_WINRES="1",
+               PHOTOCRAFT_BUILD_SHA=head, PHOTOCRAFT_BUILD_DATE=datetime.now(ZONE).strftime("%Y-%m-%d"))
     # Optional fonts are recorded, never copied into source or silently assumed present.
     fonts = None
     if env.get("CRAFT_FONTS_DIR"):
@@ -247,6 +248,7 @@ def build(root, manifest, platform, output, target_dir, freecandy_repo=None):
     receipt = dict(title="PhotoCraft Nightly — Photoshop Plug-in Support", built_at=datetime.now(ZONE).isoformat(),
                    timezone="America/Indiana/Indianapolis", integration=head, manifest=manifest, target=target,
                    rustc=command(["rustc", "--version", "--verbose"], root, capture=True), profile="release",
+                   embedded_build_sha=head, embedded_build_date=env["PHOTOCRAFT_BUILD_DATE"],
                    commands=commands, cpus=cpus, fonts=fonts,
                    windows_imports=imports,
                    checks=["pinned source ancestry", "clean source worktree", "worker x86/x64 PE architecture", "Windows imports: system DLLs only"] +
