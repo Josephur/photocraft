@@ -370,7 +370,13 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                         room = (room - (ui.cursor().top() - top)).max(120.0);
                     }
                     let body = |ui: &mut egui::Ui, fields: &mut serde_json::Map<String, Value>| {
-                        egui::ScrollArea::vertical().id_salt(id.with("body")).max_height(room).show(ui, |ui| crate::filter_dialog::body(ui, fields));
+                        egui::ScrollArea::vertical().id_salt(id.with("body")).max_height(room).show(ui, |ui| {
+                            if crate::bitmap_dialog::owns(fields) {
+                                crate::bitmap_dialog::body(app, ui, fields);
+                            } else {
+                                crate::filter_dialog::body(ui, fields);
+                            }
+                        });
                         // The in-dialog preview window sits under the scrolling parameters (#3769),
                         // so it never shifts them.
                         crate::filter_preview_ui::window(app, d.id, ui, fields);
