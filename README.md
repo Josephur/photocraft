@@ -15,7 +15,8 @@
   <b>PhotoCraft Nightly — Photoshop Plug-in Support</b><br>
   Experimental Photoshop-compatible <code>.8bf</code> filters, including 32-bit and 64-bit plug-ins,<br>
   in a native, open-source image editor for Windows and Linux.<br>
-  <a href="nightly/README.md"><b>Build the plug-in-enabled nightly</b></a> ·
+  <a href="https://github.com/Josephur/photocraft/releases"><b>Download Photoshop plug-in nightlies</b></a> ·
+  <a href="nightly/README.md">Build and CI details</a> ·
   <a href="docs/native-8bf.md">Install plug-ins and check compatibility</a>
 </p>
 
@@ -23,7 +24,8 @@
 > presets and previews. Linux runs the Windows filter workers through external Wine.
 > Compatibility is experimental: RGB/Grayscale 8-/16-bit raster filters; individual plug-ins
 > may require unsupported host services. UXP and `.8bi` importers are not supported.
-> Nightly artifacts are currently built locally; the upstream downloads below are separate.
+> Nightly builds and checks run daily at 4:17 a.m. Indianapolis time and on updates to this
+> fork’s `nightly` branch. Successful builds publish unsigned prereleases; the upstream downloads below are separate.
 
 
 <p align="center">
