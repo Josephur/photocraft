@@ -140,6 +140,7 @@ the `_image.overlap` they receive and fail if it is insufficient.
   "description": "What it does.",
   "params": {
     "amount": {"type": "number", "min": 0, "max": 100, "default": 50},
+    "shift":  {"type": "number", "min": 0, "max": 40, "default": 4, "unit": "px"},
     "steps":  {"type": "int", "min": 1, "max": 16, "default": 4},
     "mono":   {"type": "bool", "default": false},
     "mode":   {"type": "choice", "options": ["soft", "hard"], "default": "soft"}
@@ -200,6 +201,16 @@ Swirl's Distort style. The strength control repeats the style selector's `effect
 
 Manifests that omit these optional fields keep the existing dialog and preset behavior.
 
+- `unit` (optional, on `number` and `int` params): `"px"` marks a length in document pixels (a
+  radius, distance, shift or size); `"none"`, the default, is everything else (levels, factors,
+  counts, percentages). Any other value (an unknown string, a number…) is treated as `"none"`, as
+  when the field is absent, so older manifests keep installing. A filter dialog's live preview on a
+  large document runs on a reduced copy (Preferences › Performance › Low Resolution Previews), and
+  the host divides each `px` param by that reduction (ints rounded, kept within `min..max`) so the
+  preview shows the same lengths OK applies; when a `px` param with a positive `min` would drop below
+  it, the preview runs less reduced instead. Unitless params reach the preview unchanged, whatever
+  their name. A plug-in that marks no param `px` previews at full resolution instead, since its
+  lengths can't be scaled. OK, actions and smart filters always get the values as given.
 - `overlap` (0–1,536 on native builds; 0–256 on the web): static pixels of context the filter needs
   around each output pixel (a blur radius), or the fallback for hosts without `pc_overlap`.
   The host pads each band by `overlap` on every side, repeating the edge pixels of the canvas (or of
