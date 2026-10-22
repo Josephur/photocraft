@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import ci
 
@@ -48,3 +49,28 @@ class PayloadTests(unittest.TestCase):
         self.save()
         with self.assertRaisesRegex(ValueError, 'escapes'):
             ci.verify_bundle(self.bundle, 'a' * 40)
+
+
+class AutomationRootTests(unittest.TestCase):
+    def test_mac_fixtures_are_copied_inside_single_automation_root(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fixtures = root / "original"
+            for arch in ("i686", "x86_64"):
+                path = fixtures / arch / "photocraft-conformance.8bf"
+                path.parent.mkdir(parents=True)
+                path.write_bytes(arch.encode())
+            output = root / "qa"
+            output.mkdir()
+            with patch.object(ci.sys, "platform", "darwin"):
+                args, copied = ci.editor_launch(root / "bundle", output, 1234, output / "token", fixtures)
+            self.assertEqual(args.count("--automation-read-root"), 1)
+            self.assertEqual(Path(args[args.index("--automation-read-root") + 1]), output)
+            self.assertTrue(copied.is_relative_to(output))
+            for original in fixtures.rglob("*.8bf"):
+                self.assertEqual((copied / original.relative_to(fixtures)).read_bytes(), original.read_bytes())
+            self.assertIn("PhotoCraft.app/Contents/MacOS/PhotoCraft", args[0])
+            with patch.object(ci.sys, "platform", "win32"):
+                other_args, unused = ci.editor_launch(root / "bundle", root / "windows-qa", 1234, root / "token", fixtures)
+            self.assertEqual(other_args.count("--automation-read-root"), 1)
+            self.assertFalse(unused.exists())

@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
 import time
@@ -51,6 +52,19 @@ def fixtures(destination):
                             "-C", "linker=" + arch + "-w64-mingw32-gcc", "-O",
                             str(ROOT / "compat/8bf-worker/tests" / (source + ".rs")),
                             "-o", str(output / ("photocraft-" + name + ".8bf"))], check=True)
+
+
+
+def editor_launch(bundle, output, port, token, fixture_dir=None):
+    """Keep relative automation I/O and copied Mac fixtures under one allowed root."""
+    suffix = ".exe" if os.name == "nt" else ""
+    editor = bundle / "PhotoCraft.app/Contents/MacOS/PhotoCraft" if sys.platform == "darwin" else bundle / ("photocraft" + suffix)
+    args = [str(editor), "--new-instance", "--safe-gpu", "--control", str(port),
+            "--control-token-file", str(token), "--automation-read-root", str(output), "--automation-write-root", str(output)]
+    app_fixtures = output / "fixtures"
+    if fixture_dir and sys.platform == "darwin":
+        shutil.copytree(fixture_dir, app_fixtures, dirs_exist_ok=True)
+    return args, app_fixtures
 
 
 def smoke(bundle, output, revision, fixture_dir=None):
@@ -102,11 +116,7 @@ def smoke(bundle, output, revision, fixture_dir=None):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     token = output / "control.token"
-    editor = bundle / "PhotoCraft.app/Contents/MacOS/PhotoCraft" if sys.platform == "darwin" else bundle / ("photocraft" + suffix)
-    args = [str(editor), "--new-instance", "--safe-gpu", "--control", str(port),
-            "--control-token-file", str(token), "--automation-read-root", str(output), "--automation-write-root", str(output)]
-    if fixture_dir:
-        args += ["--automation-read-root", str(fixture_dir)]
+    args, app_fixtures = editor_launch(bundle, output, port, token, fixture_dir)
     connection = None
     with (output / "editor.log").open("w") as log:
         process = subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -144,7 +154,7 @@ def smoke(bundle, output, revision, fixture_dir=None):
                 for arch in ("i686", "x86_64"):
                     rpc("app.open", dict(path=arch + "-before.png"))
                     installed = rpc("engine.execute", dict(command="plugin.8bf.install", params=dict(
-                        path=str(fixture_dir / arch / "photocraft-conformance.8bf"))))
+                        path=str(app_fixtures / arch / "photocraft-conformance.8bf"))))
                     rpc("engine.execute", dict(command="plugin.8bf.run", params=dict(id=installed["id"], show_ui=False)))
                     for undo, expected in ((False, 0), (True, 255)):
                         if undo:
