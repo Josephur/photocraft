@@ -148,7 +148,12 @@ deployment target is macOS 11; CI runtime acceptance is on macOS 15.
 Publication requires native app startup/control/menu checks and actual FreeCandy
 RGB16 rendering on Intel and Apple Silicon. The Wine bridge checks use the exact
 shipped workers and original clean-room test filters, including inversion and undo
-through both CLI and the app's Resources worker lookup. CI downloads the checksum
+through the shipped CLI. A byte-identical CLI copy in a temporary app-shaped folder
+also exercises the shared Resources worker lookup, without changing the signed app.
+The desktop control channel deliberately rejects native plug-in registration and
+execution; GUI-triggered native filter execution is not certified by these checks. CI disables Wine's Vulkan driver for CPU raster fixtures (avoiding hosted Intel
+Mac GPU-enumeration hangs) and records that setting in QA metadata. This does not
+certify GPU-using plug-ins. CI downloads the checksum
 pinned Gcenx Wine stable 11.0_1 runtime only for QA; Wine is not shipped. Users need
 an external compatible Wine runtime, and Intel Wine on Apple Silicon needs Rosetta.
 This certifies the tested bridge cases, not arbitrary third-party plug-ins.
