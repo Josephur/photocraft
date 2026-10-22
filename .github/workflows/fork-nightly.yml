@@ -287,8 +287,8 @@ jobs:
           bundle=$(find target/mac-unpacked -mindepth 1 -maxdepth 1 -type d -name '*-macos-universal' -print -quit)
           codesign --verify --strict --deep --verbose=2 "$bundle/PhotoCraft.app"
           codesign --verify --strict --verbose=2 "$bundle/photocraft-cli"
-          lipo -verify_arch arm64 x86_64 "$bundle/PhotoCraft.app/Contents/MacOS/PhotoCraft"
-          lipo -verify_arch arm64 x86_64 "$bundle/photocraft-cli"
+          lipo "$bundle/PhotoCraft.app/Contents/MacOS/PhotoCraft" -verify_arch arm64 x86_64
+          lipo "$bundle/photocraft-cli" -verify_arch arm64 x86_64
           python nightly/ci.py smoke "$bundle" --revision "$REVISION" --output target/qa-macos/native
       - name: Validate Mac Wine bridge with exact shipped workers
         env:
