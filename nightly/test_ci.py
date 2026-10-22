@@ -52,25 +52,31 @@ class PayloadTests(unittest.TestCase):
 
 
 class AutomationRootTests(unittest.TestCase):
-    def test_mac_fixtures_are_copied_inside_single_automation_root(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            fixtures = root / "original"
-            for arch in ("i686", "x86_64"):
-                path = fixtures / arch / "photocraft-conformance.8bf"
-                path.parent.mkdir(parents=True)
-                path.write_bytes(arch.encode())
-            output = root / "qa"
-            output.mkdir()
-            with patch.object(ci.sys, "platform", "darwin"):
-                args, copied = ci.editor_launch(root / "bundle", output, 1234, output / "token", fixtures)
+    def test_editor_launch_keeps_one_document_read_root(self):
+        output = Path("/qa")
+        for platform in ("darwin", "win32"):
+            with patch.object(ci.sys, "platform", platform):
+                args = ci.editor_launch(Path("/bundle"), output, 1234, output / "token")
             self.assertEqual(args.count("--automation-read-root"), 1)
             self.assertEqual(Path(args[args.index("--automation-read-root") + 1]), output)
-            self.assertTrue(copied.is_relative_to(output))
-            for original in fixtures.rglob("*.8bf"):
-                self.assertEqual((copied / original.relative_to(fixtures)).read_bytes(), original.read_bytes())
-            self.assertIn("PhotoCraft.app/Contents/MacOS/PhotoCraft", args[0])
-            with patch.object(ci.sys, "platform", "win32"):
-                other_args, unused = ci.editor_launch(root / "bundle", root / "windows-qa", 1234, root / "token", fixtures)
-            self.assertEqual(other_args.count("--automation-read-root"), 1)
-            self.assertFalse(unused.exists())
+
+    def test_cli_layout_uses_exact_app_resources_workers_without_adjacent_fallback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            bundle = root / "bundle"
+            originals = {"photocraft-cli": b"exact-cli", **{
+                f"PhotoCraft.app/Contents/Resources/8bf/photocraft-8bf-worker{bits}.exe": str(bits).encode()
+                for bits in (32, 64)}}
+            for name, data in originals.items():
+                path = bundle / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            cli = Path(ci.resources_layout_cli(bundle, root / "qa"))
+            self.assertEqual(cli.read_bytes(), originals["photocraft-cli"])
+            self.assertEqual(cli.parent.name, "MacOS")
+            for bits in (32, 64):
+                name = f"photocraft-8bf-worker{bits}.exe"
+                self.assertFalse((cli.parent / name).exists())
+                self.assertEqual((cli.parent.parent / "Resources/8bf" / name).read_bytes(), str(bits).encode())
+            for name, data in originals.items():
+                self.assertEqual((bundle / name).read_bytes(), data)

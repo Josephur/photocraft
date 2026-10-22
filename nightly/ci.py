@@ -55,16 +55,27 @@ def fixtures(destination):
 
 
 
-def editor_launch(bundle, output, port, token, fixture_dir=None):
-    """Keep relative automation I/O and copied Mac fixtures under one allowed root."""
+def editor_launch(bundle, output, port, token):
+    """Keep relative document automation I/O under one allowed root."""
     suffix = ".exe" if os.name == "nt" else ""
     editor = bundle / "PhotoCraft.app/Contents/MacOS/PhotoCraft" if sys.platform == "darwin" else bundle / ("photocraft" + suffix)
     args = [str(editor), "--new-instance", "--safe-gpu", "--control", str(port),
             "--control-token-file", str(token), "--automation-read-root", str(output), "--automation-write-root", str(output)]
-    app_fixtures = output / "fixtures"
-    if fixture_dir and sys.platform == "darwin":
-        shutil.copytree(fixture_dir, app_fixtures, dirs_exist_ok=True)
-    return args, app_fixtures
+    return args
+
+
+def resources_layout_cli(bundle, output):
+    """Test shared Resources lookup with an exact CLI copy; never modify the signed app."""
+    contents = output / "cli-layout/PhotoCraft.app/Contents"
+    cli = contents / "MacOS/photocraft-cli"
+    cli.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(bundle / "photocraft-cli", cli)
+    workers = contents / "Resources/8bf"
+    workers.mkdir(parents=True, exist_ok=True)
+    for bits in (32, 64):
+        name = f"photocraft-8bf-worker{bits}.exe"
+        shutil.copy2(bundle / "PhotoCraft.app/Contents/Resources/8bf" / name, workers / name)
+    return str(cli)
 
 
 def smoke(bundle, output, revision, fixture_dir=None):
@@ -80,8 +91,8 @@ def smoke(bundle, output, revision, fixture_dir=None):
         raise ValueError(f"incorrect embedded version: {version}")
     results = []
 
-    def run(commands, path, depth=8):
-        args = [cli, "run", "--new", json.dumps(dict(width=128, height=128, mode="rgb", depth=depth, background="white"))]
+    def run(commands, path, depth=8, program=None):
+        args = [program or cli, "run", "--new", json.dumps(dict(width=128, height=128, mode="rgb", depth=depth, background="white"))]
         for command, params in commands:
             args += ["--cmd", command, "--params", json.dumps(params)]
         result = subprocess.run(args + ["--out", str(path)], env=env, text=True, capture_output=True, timeout=120, check=True)
@@ -95,6 +106,7 @@ def smoke(bundle, output, revision, fixture_dir=None):
         raise ValueError("FreeCandy Wood did not produce varied image pixels")
     results.append(dict(case="FreeCandy Wood RGB16", distinct_colors=colors, passed=True))
     if fixture_dir:
+        layout_cli = resources_layout_cli(bundle, output) if sys.platform == "darwin" else None
         for arch in ("i686", "x86_64"):
             fixture = fixture_dir / arch / "photocraft-conformance.8bf"
             install = ("plugin.8bf.install", dict(path=str(fixture)))
@@ -108,6 +120,13 @@ def smoke(bundle, output, revision, fixture_dir=None):
                 if Image.open(path).convert("RGB").getextrema() != ((expected, expected),) * 3:
                     raise ValueError(f"{arch} native filter/undo returned incorrect pixels")
             results.append(dict(case=arch + " native filter and undo", passed=True))
+            if layout_cli:
+                for undo, expected in ((False, 0), (True, 255)):
+                    path = output / (arch + ("-layout-undo.png" if undo else "-layout-invert.png"))
+                    run(commands + ([("edit.undo", {})] if undo else []), path, program=layout_cli)
+                    if Image.open(path).convert("RGB").getextrema() != ((expected, expected),) * 3:
+                        raise ValueError(f"{arch} CLI in app Resources layout returned incorrect pixels")
+                results.append(dict(case=arch + " exact CLI copy in app Resources layout filter and undo", passed=True))
     profile = output / "profile"
     profile.mkdir(exist_ok=True)
     (profile / "preferences.json").write_text(json.dumps({"plugIns": {"useAdditionalPluginsFolder": True,
@@ -116,7 +135,7 @@ def smoke(bundle, output, revision, fixture_dir=None):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     token = output / "control.token"
-    args, app_fixtures = editor_launch(bundle, output, port, token, fixture_dir)
+    args = editor_launch(bundle, output, port, token)
     connection = None
     with (output / "editor.log").open("w") as log:
         process = subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -150,20 +169,6 @@ def smoke(bundle, output, revision, fixture_dir=None):
             (output / "menus.json").write_text(json.dumps(menus, indent=2))
             if "FreeCandy7" not in json.dumps(menus) or "8BF" not in json.dumps(menus):
                 raise ValueError("expected plug-in menus are missing")
-            if fixture_dir and sys.platform == "darwin":
-                for arch in ("i686", "x86_64"):
-                    rpc("app.open", dict(path=arch + "-before.png"))
-                    installed = rpc("engine.execute", dict(command="plugin.8bf.install", params=dict(
-                        path=str(app_fixtures / arch / "photocraft-conformance.8bf"))))
-                    rpc("engine.execute", dict(command="plugin.8bf.run", params=dict(id=installed["id"], show_ui=False)))
-                    for undo, expected in ((False, 0), (True, 255)):
-                        if undo:
-                            rpc("engine.execute", dict(command="edit.undo"))
-                        name = arch + ("-app-undo.png" if undo else "-app-invert.png")
-                        rpc("app.save", dict(path=name))
-                        if Image.open(output / name).convert("RGB").getextrema() != ((expected, expected),) * 3:
-                            raise ValueError(f"{arch} app Resources worker lookup returned incorrect pixels")
-                    results.append(dict(case=arch + " app Resources worker filter and undo", passed=True))
             rpc("ui.screenshot", dict(path="editor.png", focus=False))
             rpc("app.quit")
             process.wait(timeout=30)

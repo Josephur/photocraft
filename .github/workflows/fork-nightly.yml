@@ -294,7 +294,7 @@ jobs:
         env:
           REVISION: ${{ github.sha }}
           WINEDEBUG: '-all'
-          WINEDLLOVERRIDES: 'mscoree,mshtml='
+          WINEDLLOVERRIDES: 'mscoree,mshtml,winevulkan='
         run: |
           curl --fail --location --retry 3 https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.0_1/wine-stable-11.0_1-osx64.tar.xz -o "$RUNNER_TEMP/wine.tar.xz"
           echo 'b50dc50ec7f41d58b115a6b685d4d1315ba3c797bd3aa0f49213f2703cb82388  '"$RUNNER_TEMP/wine.tar.xz" | shasum -a 256 --check
@@ -307,7 +307,21 @@ jobs:
           export PATH="$wine_bin:$PATH"
           arch -x86_64 /usr/bin/true
           wine --version
-          wine wineboot -u
+          mkdir -p target/qa-macos/wine-setup
+          python -u - <<'PYTHON'
+          import json, os, platform, subprocess
+          from pathlib import Path
+          output = Path('target/qa-macos/wine-setup')
+          metadata = dict(platform=platform.platform(), architecture=platform.machine(),
+                          wine=subprocess.check_output(['wine', '--version'], text=True).strip(),
+                          dll_overrides=os.environ['WINEDLLOVERRIDES'],
+                          scope='CPU raster fixtures; Wine Vulkan driver disabled; Wine not shipped')
+          (output / 'environment.json').write_text(json.dumps(metadata, indent=2))
+          with (output / 'wineboot.log').open('w') as log:
+              subprocess.run(['wine', 'wineboot', '-u'], check=True, timeout=180,
+                             env=dict(os.environ, WINEDEBUG='+timestamp,+pid,err+all,warn+all'),
+                             stdout=log, stderr=subprocess.STDOUT)
+          PYTHON
           bundle=$(find target/mac-unpacked -mindepth 1 -maxdepth 1 -type d -name '*-macos-universal' -print -quit)
           python nightly/ci.py smoke "$bundle" --revision "$REVISION" --output target/qa-macos/wine --fixtures target/qa-fixtures
           python compat/8bf-worker/tools/validate-workers.py --runner wine --prefix "$WINEPREFIX" --workers-dir "$bundle" --fixtures-dir target/qa-fixtures --large
