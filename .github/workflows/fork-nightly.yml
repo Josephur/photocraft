@@ -260,8 +260,16 @@ jobs:
         include:
           - runner: macos-15
             architecture: arm64
+            wine_version: 11.0_1
+            wine_flavor: stable
+            wine_app: Wine Stable.app
+            wine_sha: b50dc50ec7f41d58b115a6b685d4d1315ba3c797bd3aa0f49213f2703cb82388
           - runner: macos-15-intel
             architecture: x86_64
+            wine_version: '11.18'
+            wine_flavor: devel
+            wine_app: Wine Devel.app
+            wine_sha: aa0ea4c82e636ae7bca2076387cb0a5affa26509ad13f119ecd0d62bd7ba6f82
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -294,13 +302,17 @@ jobs:
         env:
           REVISION: ${{ github.sha }}
           WINEDEBUG: '-all'
-          WINEDLLOVERRIDES: 'mscoree,mshtml,winevulkan='
+          WINEDLLOVERRIDES: 'mscoree,mshtml='
+          WINE_VERSION: ${{ matrix.wine_version }}
+          WINE_FLAVOR: ${{ matrix.wine_flavor }}
+          WINE_APP: ${{ matrix.wine_app }}
+          WINE_SHA: ${{ matrix.wine_sha }}
         run: |
-          curl --fail --location --retry 3 https://github.com/Gcenx/macOS_Wine_builds/releases/download/11.0_1/wine-stable-11.0_1-osx64.tar.xz -o "$RUNNER_TEMP/wine.tar.xz"
-          echo 'b50dc50ec7f41d58b115a6b685d4d1315ba3c797bd3aa0f49213f2703cb82388  '"$RUNNER_TEMP/wine.tar.xz" | shasum -a 256 --check
+          curl --fail --location --retry 3 "https://github.com/Gcenx/macOS_Wine_builds/releases/download/$WINE_VERSION/wine-$WINE_FLAVOR-$WINE_VERSION-osx64.tar.xz" -o "$RUNNER_TEMP/wine.tar.xz"
+          echo "$WINE_SHA  $RUNNER_TEMP/wine.tar.xz" | shasum -a 256 --check
           mkdir "$RUNNER_TEMP/qa-wine"
           tar -xJf "$RUNNER_TEMP/wine.tar.xz" -C "$RUNNER_TEMP/qa-wine"
-          export PHOTOCRAFT_8BF_WINE="$RUNNER_TEMP/qa-wine/Wine Stable.app/Contents/Resources/wine/bin/wine"
+          export PHOTOCRAFT_8BF_WINE="$RUNNER_TEMP/qa-wine/$WINE_APP/Contents/Resources/wine/bin/wine"
           export PHOTOCRAFT_8BF_WINEPREFIX="$RUNNER_TEMP/photocraft-wine-prefix"
           export WINEPREFIX="$PHOTOCRAFT_8BF_WINEPREFIX"
           wine_bin=$(dirname "$PHOTOCRAFT_8BF_WINE")
@@ -315,7 +327,8 @@ jobs:
           metadata = dict(platform=platform.platform(), architecture=platform.machine(),
                           wine=subprocess.check_output(['wine', '--version'], text=True).strip(),
                           dll_overrides=os.environ['WINEDLLOVERRIDES'],
-                          scope='CPU raster fixtures; Wine Vulkan driver disabled; Wine not shipped')
+                          archive_sha256=os.environ['WINE_SHA'],
+                          scope='Original CPU raster fixtures with normal Mac driver; Wine not shipped')
           (output / 'environment.json').write_text(json.dumps(metadata, indent=2))
           with (output / 'wineboot.log').open('w') as log:
               subprocess.run(['wine', 'wineboot', '-u'], check=True, timeout=180,
@@ -374,6 +387,8 @@ jobs:
           CI and native Windows/Linux/Intel Mac/Apple Silicon runtime checks: $RUN_URL
 
           Windows/Linux builds are unsigned. The universal macOS app and CLI are ad-hoc signed, not Developer ID signed or notarized. Linux and macOS require external Wine supporting both worker architectures for native filters; Intel Wine on Apple Silicon also requires Rosetta. Linux uses Ubuntu 24.04 system libraries. Compatibility is limited to the documented RGB/Gray 8-/16-bit raster filter bridge; arbitrary vendor plug-ins, UXP and .8bi importers are not certified.
+
+          Mac native startup and FreeCandy rendering are checked on Intel and Apple Silicon. Native filter checks use original CPU fixtures through the CLI and shared Resources lookup, plus worker conformance; desktop control deliberately rejects native filter execution, so GUI-triggered filters are not certified. CI uses external Wine stable 11.0_1 on Apple Silicon and devel 11.18 on Intel; Wine is not bundled.
 
           Add the bundle's plugins folder in Preferences > Plug-ins to enable FreeCandy. Keep both worker executables alongside the editor/CLI; the Mac app includes its own pair in Contents/Resources/8bf. See the included README and 8BF-COMPATIBILITY.md.
           EOF

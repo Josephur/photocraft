@@ -151,10 +151,11 @@ shipped workers and original clean-room test filters, including inversion and un
 through the shipped CLI. A byte-identical CLI copy in a temporary app-shaped folder
 also exercises the shared Resources worker lookup, without changing the signed app.
 The desktop control channel deliberately rejects native plug-in registration and
-execution; GUI-triggered native filter execution is not certified by these checks. CI disables Wine's Vulkan driver for CPU raster fixtures (avoiding hosted Intel
-Mac GPU-enumeration hangs) and records that setting in QA metadata. This does not
-certify GPU-using plug-ins. CI downloads the checksum
-pinned Gcenx Wine stable 11.0_1 runtime only for QA; Wine is not shipped. Users need
+execution; GUI-triggered native filter execution is not certified by these checks. CI downloads checksum-pinned Gcenx Wine stable **11.0_1 on Apple Silicon** and
+devel **11.18 on Intel**, with the normal Mac graphics driver, only for QA. Stable
+11.0_1 failed to initialize on the hosted Intel runner; 11.18 passes the original
+worker cases. Runtime versions and archive hashes are recorded in QA metadata.
+CPU fixture checks do not certify GPU-using plug-ins; Wine is not shipped. Users need
 an external compatible Wine runtime, and Intel Wine on Apple Silicon needs Rosetta.
 This certifies the tested bridge cases, not arbitrary third-party plug-ins.
 
