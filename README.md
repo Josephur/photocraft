@@ -14,18 +14,18 @@
 <p align="center">
   <b>PhotoCraft Nightly — Photoshop Plug-in Support</b><br>
   Experimental Photoshop-compatible <code>.8bf</code> filters, including 32-bit and 64-bit plug-ins,<br>
-  in a native, open-source image editor for Windows and Linux.<br>
+  in a native, open-source image editor for Windows, Linux and macOS (Apple Silicon + Intel).<br>
   <a href="https://github.com/Josephur/photocraft/releases"><b>Download Photoshop plug-in nightlies</b></a> ·
   <a href="nightly/README.md">Build and CI details</a> ·
   <a href="docs/native-8bf.md">Install plug-ins and check compatibility</a>
 </p>
 
 > This fork combines desktop 8BF support with the FreeCandy host's effect suites, controls,
-> presets and previews. Linux runs the Windows filter workers through external Wine.
+> presets and previews. Linux and macOS run the Windows filter workers through external Wine.
 > Compatibility is experimental: RGB/Grayscale 8-/16-bit raster filters; individual plug-ins
 > may require unsupported host services. UXP and `.8bi` importers are not supported.
 > Nightly builds and checks run daily at 4:17 a.m. Indianapolis time and on updates to this
-> fork’s `nightly/latest` branch. Successful builds publish unsigned prereleases; the upstream downloads below are separate.
+> fork’s `nightly/latest` branch. Successful builds publish experimental prereleases (Mac ad-hoc signed, not notarized); the upstream downloads below are separate.
 
 
 <p align="center">

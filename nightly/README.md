@@ -128,3 +128,32 @@ or feature commits. Refresh those pins through the reviewed process above.
 The fork’s inherited FreeBSD, Perf (nightly), and Windows ARM64 scheduled workflows are disabled
 in repository Actions settings to avoid unrelated scheduled jobs on the new default branch.
 Normal feature CI and upstream workflow files remain unchanged.
+
+
+### Universal macOS nightlies
+
+The fork workflow builds native slices in parallel on `macos-15` (Apple Silicon)
+and `macos-15-intel`, then combines the editor and CLI with `lipo`. The release ZIP
+contains a native universal `PhotoCraft.app`, universal CLI, both exact Windows
+worker binaries from the same run, pinned FreeCandy WASM and licenses. The app has
+its own workers in `Contents/Resources/8bf`; CLI workers remain beside the CLI.
+FreeCandy is available in both the top-level `plugins` folder and app Resources.
+
+The app and CLI are ad-hoc signed after packaging, with strict signature checks
+and system-only dynamic library checks. They are **not Developer ID signed or
+notarized**. macOS may block quarantined downloads; use the supported Privacy &
+Security Open Anyway flow only after reviewing and trusting the build. The build
+deployment target is macOS 11; CI runtime acceptance is on macOS 15.
+
+Publication requires native app startup/control/menu checks and actual FreeCandy
+RGB16 rendering on Intel and Apple Silicon. The Wine bridge checks use the exact
+shipped workers and original clean-room test filters, including inversion and undo
+through both CLI and the app's Resources worker lookup. CI downloads the checksum
+pinned Gcenx Wine stable 11.0_1 runtime only for QA; Wine is not shipped. Users need
+an external compatible Wine runtime, and Intel Wine on Apple Silicon needs Rosetta.
+This certifies the tested bridge cases, not arbitrary third-party plug-ins.
+
+To reproduce on Macs, use `python3 nightly/macos.py slice arm64 --output <slice-dir>`
+and `slice x86_64` on the matching hosts, then `package --slices <parent-with-both-arch-dirs>
+--windows-bundle <verified-same-revision-Windows-bundle>`. The packager verifies
+slice receipts before lipo/signing and writes a complete hashed build receipt.

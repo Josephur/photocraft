@@ -19,10 +19,15 @@ def verify_bundle(bundle, revision):
     if receipt["integration"] != revision or receipt["embedded_build_sha"] != revision:
         raise ValueError("bundle does not match the workflow revision")
     suffix = ".exe" if receipt["target"] == "x86_64-pc-windows-gnu" else ""
-    required = {"photocraft" + suffix, "photocraft-cli" + suffix, "photocraft-8bf-worker32.exe",
+    editor = "PhotoCraft.app/Contents/MacOS/PhotoCraft" if receipt["target"] == "universal-apple-darwin" else "photocraft" + suffix
+    required = {editor, "photocraft-cli" + suffix, "photocraft-8bf-worker32.exe",
                 "photocraft-8bf-worker64.exe", "plugins/freecandy7.wasm", "plugins/FreeCandy7-LICENSE",
                 "plugins/FreeCandy7-LICENSE-THIRD-PARTY", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE",
                 "ATTRIBUTION.md", "8BF-COMPATIBILITY.md", "README.txt", "SOURCE-MANIFEST.json"}
+    if receipt["target"] == "universal-apple-darwin":
+        required |= {"PhotoCraft.app/Contents/Info.plist", "PhotoCraft.app/Contents/Resources/8bf/photocraft-8bf-worker32.exe",
+                     "PhotoCraft.app/Contents/Resources/8bf/photocraft-8bf-worker64.exe",
+                     "PhotoCraft.app/Contents/Resources/plugins/freecandy7.wasm"}
     if not required <= receipt["files"].keys():
         raise ValueError("bundle is missing required plug-in payloads")
     for name, expected in receipt["files"].items():
@@ -97,8 +102,11 @@ def smoke(bundle, output, revision, fixture_dir=None):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     token = output / "control.token"
-    args = [str(bundle / ("photocraft" + suffix)), "--new-instance", "--safe-gpu", "--control", str(port),
+    editor = bundle / "PhotoCraft.app/Contents/MacOS/PhotoCraft" if sys.platform == "darwin" else bundle / ("photocraft" + suffix)
+    args = [str(editor), "--new-instance", "--safe-gpu", "--control", str(port),
             "--control-token-file", str(token), "--automation-read-root", str(output), "--automation-write-root", str(output)]
+    if fixture_dir:
+        args += ["--automation-read-root", str(fixture_dir)]
     connection = None
     with (output / "editor.log").open("w") as log:
         process = subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -132,6 +140,20 @@ def smoke(bundle, output, revision, fixture_dir=None):
             (output / "menus.json").write_text(json.dumps(menus, indent=2))
             if "FreeCandy7" not in json.dumps(menus) or "8BF" not in json.dumps(menus):
                 raise ValueError("expected plug-in menus are missing")
+            if fixture_dir and sys.platform == "darwin":
+                for arch in ("i686", "x86_64"):
+                    rpc("app.open", dict(path=arch + "-before.png"))
+                    installed = rpc("engine.execute", dict(command="plugin.8bf.install", params=dict(
+                        path=str(fixture_dir / arch / "photocraft-conformance.8bf"))))
+                    rpc("engine.execute", dict(command="plugin.8bf.run", params=dict(id=installed["id"], show_ui=False)))
+                    for undo, expected in ((False, 0), (True, 255)):
+                        if undo:
+                            rpc("engine.execute", dict(command="edit.undo"))
+                        name = arch + ("-app-undo.png" if undo else "-app-invert.png")
+                        rpc("app.save", dict(path=name))
+                        if Image.open(output / name).convert("RGB").getextrema() != ((expected, expected),) * 3:
+                            raise ValueError(f"{arch} app Resources worker lookup returned incorrect pixels")
+                    results.append(dict(case=arch + " app Resources worker filter and undo", passed=True))
             rpc("ui.screenshot", dict(path="editor.png", focus=False))
             rpc("app.quit")
             process.wait(timeout=30)
