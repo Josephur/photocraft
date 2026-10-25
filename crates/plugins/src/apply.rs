@@ -70,6 +70,9 @@ fn read_clamped(s: &Surface, rect: Rect, extent: Rect) -> Vec<f32> {
     out
 }
 
+/// Most bands one run is split into.
+const MAX_BANDS: u64 = 1 << 16;
+
 impl Plugin {
     /// The rectangle a run writes: the layer's content (grown by the plug-in's overlap) or the
     /// canvas, limited to the selection's bounds. This parameter-free query uses the manifest
@@ -129,6 +132,13 @@ impl Plugin {
             let layout = band_layout(self.limits(), n, ov as usize, workers)?;
             let mut bands = Vec::new();
             let (t0, t1) = (TileCoord::containing(area.x0, area.y0), TileCoord::containing(area.x1 - 1, area.y1 - 1));
+            // Counted before any is made: a few distant tiles make `area` a grid of millions of
+            // bands, each a call into the plug-in, planned before the deadline starts.
+            let columns = (i64::from(t1.tx) - i64::from(t0.tx) + 1).max(0) as u64;
+            let rows = (i64::from(t1.ty) - i64::from(t0.ty) + 1).max(0) as u64;
+            if columns.div_ceil(layout.across.max(1) as u64).saturating_mul(rows) > MAX_BANDS {
+                return Err(Error::Limit(format!("more than {MAX_BANDS} bands (the layer's content is spread too widely)")));
+            }
             for ty in t0.ty..=t1.ty {
                 let mut tx = t0.tx;
                 while tx <= t1.tx {
@@ -349,8 +359,8 @@ fn context_bands(area: Rect, extent: Rect, overlap: i32, channels: usize, limits
             if across == 0 {
                 return Err(fail());
             }
-            if bands.len() >= 1_048_576 {
-                return Err(Error::Limit("band count budget".into()));
+            if bands.len() as u64 >= MAX_BANDS {
+                return Err(Error::Limit(format!("more than {MAX_BANDS} bands (the layer's content is spread too widely)")));
             }
             bands.push(tile_block(tx, ty, across, down).intersect(&area));
             tx = tx.saturating_add(across);
