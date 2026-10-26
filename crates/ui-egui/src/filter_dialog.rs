@@ -1057,11 +1057,12 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                 // The same value the canvas handle drags (`plugin_points`), so the two stay in sync.
                 let [mut x, mut y] = crate::plugin_points::value(f, &p.key).unwrap_or(default);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(label(&p.key)).color(t.text_dim));
+                    let name = label(&p.key);
+                    ui.label(egui::RichText::new(&name).color(t.text_dim));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        crate::widgets::value_field(ui, &mut y, 0.0..=100.0, "%", 64.0);
+                        crate::widgets::value_field(ui, &mut y, 0.0..=100.0, "%", 64.0).accessible_name(format!("{name} Y"));
                         ui.label(egui::RichText::new("Y").color(t.text_dim));
-                        crate::widgets::value_field(ui, &mut x, 0.0..=100.0, "%", 64.0);
+                        crate::widgets::value_field(ui, &mut x, 0.0..=100.0, "%", 64.0).accessible_name(format!("{name} X"));
                         ui.label(egui::RichText::new("X").color(t.text_dim));
                     });
                 });
