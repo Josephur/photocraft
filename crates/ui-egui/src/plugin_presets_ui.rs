@@ -110,7 +110,7 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
     let (mut picked, mut save_as_clicked, mut delete_clicked) = (false, false, false);
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(tl!("Presets")).color(t.text_dim));
-        picked = crate::widgets::dropdown(ui, &format!("plugin-presets-{}", m.id), &mut chosen, &opts, 150.0);
+        picked = crate::widgets::dropdown(ui, &format!("plugin-presets-{}", m.id), tl!("Presets"), &mut chosen, &opts, 150.0);
         save_as_clicked = crate::widgets::secondary_button(ui, tl!("Save As…"), 0.0).clicked();
         delete_clicked = ui.add_enabled_ui(!chosen.is_empty(), |ui| crate::widgets::secondary_button(ui, tl!("Delete"), 0.0).clicked()).inner;
     });
