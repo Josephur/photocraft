@@ -122,7 +122,7 @@ staple() {
     if xcrun stapler staple "$file" && xcrun stapler validate "$file"; then
       return
     fi
-    if [ "$attempt" = 5 ]; then
+    if [[ "$attempt" = 5 ]]; then
       echo "error: stapling $(basename "$file") failed after $attempt attempts" >&2
       exit 1
     fi
@@ -142,6 +142,8 @@ if [ "$HAVE_8BF_WORKERS" = 1 ]; then
   mkdir -p "$APP/Contents/Resources/8bf"
   cp "$WORKER_DIR"/photocraft-8bf-worker{32,64}.exe "$APP/Contents/Resources/8bf/"
 fi
+# Notices for the bundled font fallback, included before the bundle is signed.
+cp "$ROOT/NOTICE" "$ROOT/ATTRIBUTION.md" "$APP/Contents/Resources/"
 # Licences of the embedded craft-fonts fonts (only when built with CRAFT_FONTS_DIR).
 if [[ -n "${CRAFT_FONTS_DIR:-}" ]]; then
   mkdir -p "$APP/Contents/Resources/Licenses"
