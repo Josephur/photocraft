@@ -932,7 +932,7 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                 ui.horizontal_wrapped(|ui| {
                     for name in &tabs {
                         let response = crate::widgets::pill_tab(ui, name, *name == selected);
-                        response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, ui.is_enabled(), *name == selected, name));
+                        response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, ui.is_enabled(), *name == selected, name));
                         if response.clicked() {
                             selected.clone_from(name);
                         }
@@ -1188,7 +1188,7 @@ fn angle_dial_row(ui: &mut egui::Ui, name: &str, deg: &mut f32) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             crate::widgets::value_field(ui, deg, -36000.0..=36000.0, "°", 64.0);
             let (rect, mut dial) = ui.allocate_exact_size(egui::vec2(DIAL, DIAL), egui::Sense::click_and_drag());
-            dial.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, ui.is_enabled(), name));
+            dial.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, ui.is_enabled(), name));
             let c = rect.center();
             if (dial.clicked() || dial.dragged())
                 && let Some(a) = dial.interact_pointer_pos().and_then(|pos| dial_angle(pos - c))

@@ -95,7 +95,7 @@ pub fn active(app: &PhotocraftApp, idx: usize) -> bool {
 pub fn interact(app: &mut PhotocraftApp, ctx: &egui::Context, xf: &ViewXform, size: [u32; 2], rect: egui::Rect, idx: usize) {
     let Some(di) = dialog(app, idx) else { return };
     let Some(h) = app.ui.dialogs.get(di).and_then(|d| handles(&d.fields)) else { return };
-    let id = egui::Id::new(DRAG);
+    let id = egui::Id::unique(DRAG);
     let screen: Vec<Pos2> = h.points.iter().map(|(_, p)| to_doc(*p, size)).map(|d| xf.to_screen(d[0], d[1])).collect();
     let Some(p) = crate::dialogs::free_press(ctx, rect) else {
         if !ctx.input(|i| i.pointer.primary_down()) {

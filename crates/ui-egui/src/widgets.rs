@@ -3199,8 +3199,8 @@ mod section_dropdown_tests {
     fn sections_open_in_an_anchored_modal_with_no_user_presets() {
         let mut h = Harness::builder().with_size(vec2(1443.0, 1000.0)).build_ui_state(
             |ui, selected: &mut String| {
-                egui::Modal::new(egui::Id::new("preset-modal"))
-                    .area(egui::Modal::default_area(egui::Id::new("preset-modal")).anchor(egui::Align2::LEFT_TOP, vec2(892.0, 157.0)))
+                egui::Modal::new(egui::Id::unique("preset-modal"))
+                    .area(egui::Modal::default_area(egui::Id::unique("preset-modal")).anchor(egui::Align2::LEFT_TOP, vec2(892.0, 157.0)))
                     .show(ui.ctx(), |ui| {
                         // Reproduce a modal's remembered foreground layer being raised after
                         // the popup's cached area already exists.
@@ -3233,7 +3233,7 @@ mod section_dropdown_tests {
         let giraffe = h.get_by_label("Giraffe").rect().center();
         assert_ne!(
             h.ctx.layer_id_at(giraffe),
-            Some(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("preset-modal"))),
+            Some(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("preset-modal"))),
             "the popup rows must be above the modal"
         );
         h.get_by_label("Giraffe").click();
