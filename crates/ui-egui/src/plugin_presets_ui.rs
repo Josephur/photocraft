@@ -236,7 +236,7 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
         options.extend(builtins.keys().map(|name| (Some(("builtin".to_string(), name.clone())), name.as_str())));
         options.push((None, "Your presets"));
         options.extend(user_presets.keys().map(|name| (Some(("user".to_string(), name.clone())), name.as_str())));
-        picked = crate::widgets::dropdown_sections(ui, &format!("plugin-presets-{}", m.id), &mut selection, &options, 150.0);
+        picked = crate::widgets::dropdown_sections(ui, &format!("plugin-presets-{}", m.id), tl!("Presets"), &mut selection, &options, 150.0);
         (source, chosen) = selection;
         save_as_clicked = ui.add_enabled_ui(can_save, |ui| crate::widgets::secondary_button(ui, tl!("Save As…"), 0.0).clicked()).inner;
         delete_clicked = ui

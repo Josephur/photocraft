@@ -1516,7 +1516,8 @@ pub fn dropdown_literal<T: PartialEq + Clone>(ui: &mut Ui, id: &str, name: &str,
 }
 
 /// A dropdown with nonselectable section headings (`None` values).
-pub fn dropdown_sections<T: PartialEq + Clone>(ui: &mut Ui, id: &str, current: &mut T, options: &[(Option<T>, &str)], width: f32) -> bool {
+/// `name` is the dropdown's accessible name, as for [`dropdown`].
+pub fn dropdown_sections<T: PartialEq + Clone>(ui: &mut Ui, id: &str, name: &str, current: &mut T, options: &[(Option<T>, &str)], width: f32) -> bool {
     let label = options.iter().find(|(value, _)| value.as_ref() == Some(current)).map(|(_, label)| *label).unwrap_or("—");
     let mut changed = false;
     let response = egui::ComboBox::from_id_salt(id).selected_text(label).width(width).height(420.0).icon(chevron_icon).show_ui(ui, |ui| {
@@ -1532,13 +1533,14 @@ pub fn dropdown_sections<T: PartialEq + Clone>(ui: &mut Ui, id: &str, current: &
             }
         }
     });
-    if ui.is_enabled() && egui::ComboBox::is_open(ui.ctx(), response.response.id) {
+    let response = response.response.accessible_name(name);
+    if ui.is_enabled() && egui::ComboBox::is_open(ui.ctx(), response.id) {
         // A cached popup can otherwise stay below a modal brought forward on the opening
         // pointer press. Keep its visible rows above the dialog on every layout pass.
-        ui.ctx().move_to_top(egui::LayerId::new(egui::Order::Foreground, response.response.id.with("popup")));
+        ui.ctx().move_to_top(egui::LayerId::new(egui::Order::Foreground, response.id.with("popup")));
     }
     let selectable: Vec<_> = options.iter().filter_map(|(value, label)| value.clone().map(|value| (value, *label))).collect();
-    changed || combo_box_arrow_keys(ui, &response.response, current, &selectable)
+    changed || combo_box_arrow_keys(ui, &response, current, &selectable)
 }
 
 /// [`dropdown`], also returning the option under the pointer in its open list (live previews).
@@ -3218,7 +3220,7 @@ mod section_dropdown_tests {
                             (Some("Zebra".into()), "Zebra"),
                             (None, "Your presets"),
                         ];
-                        dropdown_sections(ui, "animal-presets", selected, &options, 150.0);
+                        dropdown_sections(ui, "animal-presets", "Presets", selected, &options, 150.0);
                         ui.add_space(350.0);
                     });
             },

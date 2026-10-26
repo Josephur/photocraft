@@ -1112,11 +1112,12 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                 // The same value the canvas handle drags (`plugin_points`), so the two stay in sync.
                 let [mut x, mut y] = crate::plugin_points::value(f, &p.key).unwrap_or(default);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(field_label(f, &p.key)).color(t.text_dim));
+                    let name = field_label(f, &p.key);
+                    ui.label(egui::RichText::new(&name).color(t.text_dim));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        crate::widgets::value_field(ui, &mut y, 0.0..=100.0, "%", 64.0);
+                        crate::widgets::value_field(ui, &mut y, 0.0..=100.0, "%", 64.0).accessible_name(format!("{name} Y"));
                         ui.label(egui::RichText::new("Y").color(t.text_dim));
-                        crate::widgets::value_field(ui, &mut x, 0.0..=100.0, "%", 64.0);
+                        crate::widgets::value_field(ui, &mut x, 0.0..=100.0, "%", 64.0).accessible_name(format!("{name} X"));
                         ui.label(egui::RichText::new("X").color(t.text_dim));
                     });
                 });
@@ -3216,31 +3217,31 @@ mod tests {
         );
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
         h.run_steps(4);
-        assert!(h.query_by_label("Effect").is_some());
-        assert!(h.query_by_label("General").is_none(), "the hoisted selector cannot create an empty tab");
-        assert!(h.query_by_label("Bolt Width").is_some());
-        assert!(h.query_by_label("Shadow Softness").is_none());
+        assert!(h.query_all_by_label("Effect").next().is_some(), "the hoisted selector is shown");
+        assert!(h.query_all_by_label("General").next().is_none(), "the hoisted selector cannot create an empty tab");
+        assert!(h.query_all_by_label("Bolt Width").next().is_some());
+        assert!(h.query_all_by_label("Shadow Softness").next().is_none());
         h.get_by_label("Glow").click();
         h.run_steps(2);
         assert_eq!(h.state()[TAB], json!("Glow"), "a tab click survives later frames");
-        assert!(h.query_by_label("Glow Size").is_some());
+        assert!(h.query_all_by_label("Glow Size").next().is_some());
         let values = params_of(h.state());
 
         h.state_mut().insert("effect".into(), json!("shadow"));
         h.run_steps(2);
         assert_eq!(h.state()[TAB], json!("Shadow"), "a stale Lightning tab repairs to the visible group");
-        assert!(h.query_by_label("Shadow Softness").is_some());
+        assert!(h.query_all_by_label("Shadow Softness").next().is_some());
         for label in ["Bolt", "Glow", "Colour", "Shadow", "Bolt Width", "Glow Size", "Inner Colour"] {
-            assert!(h.query_by_label(label).is_none(), "single-group effect has no tabs or Lightning controls: {label}");
+            assert!(h.query_all_by_label(label).next().is_none(), "single-group effect has no tabs or Lightning controls: {label}");
         }
         h.state_mut().insert("effect".into(), json!("fire"));
         h.run_steps(2);
         assert_eq!(h.state()[TAB], json!(""));
-        assert!(h.query_by_label("Fire Style").is_some());
-        assert!(h.query_by_label("Flame Detail").is_none(), "AND predicates hide subordinate controls");
+        assert!(h.query_all_by_label("Fire Style").next().is_some());
+        assert!(h.query_all_by_label("Flame Detail").next().is_none(), "AND predicates hide subordinate controls");
         h.state_mut().insert("fire_style".into(), json!("hard"));
         h.run_steps(2);
-        assert!(h.query_by_label("Flame Detail").is_some());
+        assert!(h.query_all_by_label("Flame Detail").next().is_some());
         h.state_mut().insert("effect".into(), json!("lightning"));
         h.run_steps(2);
         for key in ["bolt_width", "glow_size", "inner_colour", "shadow_softness", "fire_detail"] {
