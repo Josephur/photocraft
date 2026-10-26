@@ -1222,7 +1222,7 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
             f.insert("__gpuAdapters".into(), json!(app.perf.gpu_info.adapters));
             let system = system_theme(app, ui.ctx());
             prefs_body(ui, f, system, app.services.file_dialog.is_some() && !app.file_dialog_open());
-            if let Some(request) = ui.ctx().data_mut(|data| data.remove_temp::<PluginFolderBrowse>(egui::Id::new("prefs-plugin-folder-browse"))) {
+            if let Some(request) = ui.ctx().data_mut(|data| data.remove_temp::<PluginFolderBrowse>(egui::Id::unique("prefs-plugin-folder-browse"))) {
                 browse_plugin_folder(app, id, request);
             }
         }
@@ -1871,7 +1871,7 @@ fn browse_plugin_folder(app: &mut PhotocraftApp, id: u64, request: PluginFolderB
 fn plugin_folder_rows(ui: &mut egui::Ui, obj: &mut Map<String, Value>, can_browse: bool) {
     let t = Tokens::get(ui.ctx());
     ui.add_space(12.0);
-    ui.label(RichText::new(tl!("Plug-in folders")).font(crate::theme::semibold(13.0)));
+    let heading = ui.label(RichText::new(tl!("Plug-in folders")).font(crate::theme::semibold(13.0))).id;
     ui.label(RichText::new(tl!("Subfolders are included.")).color(t.text_faint));
     let mut legacy = obj.get("additionalPluginsFolder").and_then(Value::as_str).unwrap_or("").to_string();
     let mut folders: Vec<String> = obj.get("additionalPluginsFolders").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
@@ -1880,7 +1880,7 @@ fn plugin_folder_rows(ui: &mut egui::Ui, obj: &mut Map<String, Value>, can_brows
     let mut changed = false;
     if !legacy.trim().is_empty() {
         let previous = legacy.clone();
-        let (edited, picked, removed) = plugin_folder_row(ui, None, &mut legacy, can_browse);
+        let (edited, picked, removed) = plugin_folder_row(ui, None, &mut legacy, can_browse, heading);
         changed |= edited || removed;
         if picked {
             browse = Some((None, previous));
@@ -1891,7 +1891,7 @@ fn plugin_folder_rows(ui: &mut egui::Ui, obj: &mut Map<String, Value>, can_brows
     }
     for (index, folder) in folders.iter_mut().enumerate() {
         let previous = folder.clone();
-        let (edited, picked, removed) = plugin_folder_row(ui, Some(index), folder, can_browse);
+        let (edited, picked, removed) = plugin_folder_row(ui, Some(index), folder, can_browse, heading);
         changed |= edited;
         if picked {
             browse = Some((Some(index), previous));
@@ -1915,11 +1915,12 @@ fn plugin_folder_rows(ui: &mut egui::Ui, obj: &mut Map<String, Value>, can_brows
     }
     if let Some((index, previous)) = browse {
         let request = PluginFolderBrowse { index, previous, folders: json!(folders) };
-        ui.ctx().data_mut(|data| data.insert_temp(egui::Id::new("prefs-plugin-folder-browse"), request));
+        ui.ctx().data_mut(|data| data.insert_temp(egui::Id::unique("prefs-plugin-folder-browse"), request));
     }
 }
 
-fn plugin_folder_row(ui: &mut egui::Ui, index: Option<usize>, folder: &mut String, can_browse: bool) -> (bool, bool, bool) {
+/// Each path field is named by the "Plug-in folders" heading (`heading`) for screen readers.
+fn plugin_folder_row(ui: &mut egui::Ui, index: Option<usize>, folder: &mut String, can_browse: bool, heading: egui::Id) -> (bool, bool, bool) {
     ui.push_id(("plugin-folder", index), |ui| {
         ui.horizontal(|ui| {
             let t = Tokens::get(ui.ctx());
@@ -1928,7 +1929,7 @@ fn plugin_folder_row(ui: &mut egui::Ui, index: Option<usize>, folder: &mut Strin
             let browse_width = button_width(tl!("Browse…"), 78.0);
             let remove_width = button_width(tl!("Remove"), 72.0);
             let width = (ui.available_width() - browse_width - remove_width - 2.0 * ui.spacing().item_spacing.x).max(100.0);
-            let edited = crate::widgets::text_field(ui, ui.id().with("path"), folder, "", width, false).changed();
+            let edited = crate::widgets::text_field(ui, ui.scope_id().with("path"), folder, "", width, false).labelled_by(heading).changed();
             let picked = ui.add_enabled_ui(can_browse, |ui| crate::widgets::secondary_button(ui, tl!("Browse…"), 78.0)).inner.clicked();
             let removed = crate::widgets::secondary_button(ui, tl!("Remove"), 72.0).clicked();
             (edited, picked, removed)
@@ -4564,7 +4565,7 @@ mod tests {
         use egui_kittest::{Harness, kittest::Queryable};
         let obj = json!({"allowAgentControl": true, "controlPort": 0}).as_object().unwrap().clone();
         let mut h = Harness::new_ui_state(
-            |ui, obj: &mut Map<String, Value>| section_fields(ui, "integrations", obj, &[], crate::i18n::Lang::from_pref("en"), None, ""),
+            |ui, obj: &mut Map<String, Value>| section_fields(ui, "integrations", obj, &[], crate::i18n::Lang::from_pref("en"), None, "", false),
             obj,
         );
         h.run_steps(4);
